@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keystroke Dynamics Collector</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+        .container { min-height: 100vh; background: linear-gradient(135deg, #EBF4FF 0%, #E0E7FF 100%); padding: 24px; }
+        .max-w { max-width: 896px; margin: 0 auto; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 24px; }
+        h1 { font-size: 30px; font-weight: bold; color: #1F2937; margin-bottom: 8px; }
+        .subtitle { color: #6B7280; margin-bottom: 16px; }
+        .info-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+        .info-header { font-weight: 600; color: #1E3A8A; margin-bottom: 8px; }
+        .info-list { font-size: 14px; color: #1E40AF; padding-left: 20px; }
+        .info-list li { margin-bottom: 4px; }
+        .btn-link { font-size: 12px; color: #2563EB; text-decoration: underline; cursor: pointer; background: none; border: none; margin-top: 8px; }
+        .btn-link:hover { color: #1D4ED8; }
+        .label { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 8px; }
+        .input { width: 100%; padding: 10px 16px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; }
+        .input:focus { outline: none; border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .input:disabled { background: #F3F4F6; }
+        .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
+        .btn { display: flex; align-items: center; gap: 8px; padding: 10px 24px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; font-size: 14px; transition: all 0.2s; }
+        .btn-green { background: #10B981; color: white; }
+        .btn-green:hover { background: #059669; }
+        .btn-red { background: #EF4444; color: white; }
+        .btn-red:hover { background: #DC2626; }
+        .btn-gray { background: #6B7280; color: white; }
+        .btn-gray:hover { background: #4B5563; }
+        .btn-indigo { background: #6366F1; color: white; }
+        .btn-indigo:hover { background: #4F46E5; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .textarea { width: 100%; padding: 12px 16px; border: 2px solid #3B82F6; border-radius: 8px; font-family: monospace; font-size: 14px; resize: vertical; }
+        .textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .prompt-box { background: #FFFBEB; border: 2px solid #FBBF24; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+        .prompt-text { font-size: 14px; color: #6B7280; }
+        .prompt-content { font-family: monospace; font-weight: 600; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card { border-radius: 8px; padding: 16px; }
+        .stat-blue { background: #EFF6FF; }
+        .stat-green { background: #ECFDF5; }
+        .stat-purple { background: #F5F3FF; }
+        .stat-number { font-size: 28px; font-weight: bold; }
+        .stat-blue .stat-number { color: #2563EB; }
+        .stat-green .stat-number { color: #10B981; }
+        .stat-purple .stat-number { color: #8B5CF6; }
+        .stat-label { font-size: 14px; color: #6B7280; margin-top: 4px; }
+        .session-list { display: flex; flex-direction: column; gap: 12px; }
+        .session-item { border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; transition: background 0.2s; }
+        .session-item:hover { background: #F9FAFB; }
+        .session-header { display: flex; justify-content: space-between; align-items: center; }
+        .session-title { font-weight: 600; color: #1F2937; }
+        .session-details { font-size: 14px; color: #6B7280; margin-top: 4px; }
+        .session-id { font-size: 12px; color: #9CA3AF; }
+        h2 { font-size: 20px; font-weight: bold; color: #1F2937; margin-bottom: 16px; }
+        .icon { width: 16px; height: 16px; }
+        .show-instructions { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #2563EB; text-decoration: underline; cursor: pointer; background: none; border: none; margin-bottom: 24px; }
+        .show-instructions:hover { color: #1D4ED8; }
+        .flex-center { display: flex; align-items: flex-start; }
+        .icon-wrapper { margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const Download = () => (
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+        );
+        
+        const Play = () => (
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+        );
+        
+        const RotateCcw = () => (
+            <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+        );
+        
+        const Info = () => (
+            <svg style={{width: '20px', height: '20px'}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+        );
+
+        const KeystrokeCollector = () => {
+          const [isRecording, setIsRecording] = useState(false);
+          const [keystrokeData, setKeystrokeData] = useState([]);
+          const [sessionData, setSessionData] = useState([]);
+          const [currentSession, setCurrentSession] = useState(1);
+          const [userId, setUserId] = useState('');
+          const [textToType, setTextToType] = useState('The quick brown fox jumps over the lazy dog');
+          const [typedText, setTypedText] = useState('');
+          const [showInstructions, setShowInstructions] = useState(true);
+          
+          const keyPressTime = useRef({});
+          const sessionId = useRef(Date.now());
+
+          const handleKeyDown = (e) => {
+            if (!isRecording) return;
+            const key = e.key;
+            const timestamp = Date.now();
+            if (!keyPressTime.current[key]) {
+              keyPressTime.current[key] = timestamp;
+            }
+          };
+
+          const handleKeyUp = (e) => {
+            if (!isRecording) return;
+            const key = e.key;
+            const releaseTime = Date.now();
+            const pressTime = keyPressTime.current[key];
+            
+            if (pressTime) {
+              const dwellTime = releaseTime - pressTime;
+              const prevKeystroke = keystrokeData[keystrokeData.length - 1];
+              const flightTime = prevKeystroke ? pressTime - prevKeystroke.releaseTime : 0;
+              
+              const keystroke = {
+                sessionId: sessionId.current,
+                userId: userId,
+                key: key.length === 1 ? key : `[${key}]`,
+                pressTime: pressTime,
+                releaseTime: releaseTime,
+                dwellTime: dwellTime,
+                flightTime: flightTime,
+                timestamp: new Date().toISOString()
+              };
+              
+              setKeystrokeData(prev => [...prev, keystroke]);
+              delete keyPressTime.current[key];
+            }
+          };
+
+          const startRecording = () => {
+            if (!userId.trim()) {
+              alert('Please enter a User ID first');
+              return;
+            }
+            setIsRecording(true);
+            setKeystrokeData([]);
+            setTypedText('');
+            sessionId.current = Date.now();
+          };
+
+          const stopRecording = () => {
+            setIsRecording(false);
+            if (keystrokeData.length > 0) {
+              setSessionData(prev => [...prev, {
+                session: currentSession,
+                sessionId: sessionId.current,
+                userId: userId,
+                keystrokeCount: keystrokeData.length,
+                data: [...keystrokeData]
+              }]);
+              setCurrentSession(prev => prev + 1);
+            }
+          };
+
+          const resetAll = () => {
+            setIsRecording(false);
+            setKeystrokeData([]);
+            setSessionData([]);
+            setCurrentSession(1);
+            setTypedText('');
+            keyPressTime.current = {};
+          };
+
+          const downloadJSON = () => {
+            if (sessionData.length === 0) {
+              alert('No data to download. Please record at least one session.');
+              return;
+            }
+
+            const dataToExport = {
+              metadata: {
+                userId: userId,
+                totalSessions: sessionData.length,
+                collectionDate: new Date().toISOString(),
+                textPrompt: textToType
+              },
+              sessions: sessionData
+            };
+
+            const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `keystroke_data_${userId}_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+
+          const downloadCSV = () => {
+            if (sessionData.length === 0) {
+              alert('No data to download. Please record at least one session.');
+              return;
+            }
+
+            const headers = ['sessionId', 'userId', 'session', 'key', 'pressTime', 'releaseTime', 'dwellTime', 'flightTime', 'timestamp'];
+            const rows = sessionData.flatMap(session => 
+              session.data.map(ks => [
+                ks.sessionId,
+                ks.userId,
+                session.session,
+                ks.key,
+                ks.pressTime,
+                ks.releaseTime,
+                ks.dwellTime,
+                ks.flightTime,
+                ks.timestamp
+              ])
+            );
+
+            const csv = [
+              headers.join(','),
+              ...rows.map(row => row.join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `keystroke_data_${userId}_${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+
+          useEffect(() => {
+            if (isRecording) {
+              window.addEventListener('keydown', handleKeyDown);
+              window.addEventListener('keyup', handleKeyUp);
+            }
+
+            return () => {
+              window.removeEventListener('keydown', handleKeyDown);
+              window.removeEventListener('keyup', handleKeyUp);
+            };
+          }, [isRecording, keystrokeData]);
+
+          return (
+            <div className="container">
+              <div className="max-w">
+                <div className="card">
+                  <h1>Keystroke Dynamics Data Collector</h1>
+                  <p className="subtitle">Collect keystroke timing data for biometric authentication research</p>
+                </div>
+
+                {showInstructions && (
+                  <div className="info-box">
+                    <div className="flex-center">
+                      <div className="icon-wrapper"><Info /></div>
+                      <div style={{flex: 1}}>
+                        <h3 className="info-header">How to Use:</h3>
+                        <ol className="info-list">
+                          <li>Enter a unique User ID (e.g., user001, john_doe)</li>
+                          <li>Click "Start Recording" to begin capturing keystrokes</li>
+                          <li>Type the displayed text in the input box below</li>
+                          <li>Click "Stop Recording" when finished</li>
+                          <li>Repeat 10-15 times for the same user (multiple sessions)</li>
+                          <li>Download data as JSON or CSV format</li>
+                        </ol>
+                        <button className="btn-link" onClick={() => setShowInstructions(false)}>
+                          Hide instructions
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!showInstructions && (
+                  <button className="show-instructions" onClick={() => setShowInstructions(true)}>
+                    <Info />
+                    Show instructions
+                  </button>
+                )}
+
+                <div className="card">
+                  <div style={{marginBottom: '16px'}}>
+                    <label className="label">User ID *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={userId}
+                      onChange={(e) => setUserId(e.target.value)}
+                      disabled={isRecording}
+                      placeholder="Enter unique user identifier"
+                    />
+                  </div>
+
+                  <div style={{marginBottom: '16px'}}>
+                    <label className="label">Text to Type</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={textToType}
+                      onChange={(e) => setTextToType(e.target.value)}
+                      disabled={isRecording}
+                    />
+                  </div>
+
+                  <div className="btn-group">
+                    <button
+                      onClick={isRecording ? stopRecording : startRecording}
+                      className={`btn ${isRecording ? 'btn-red' : 'btn-green'}`}
+                    >
+                      <Play />
+                      {isRecording ? 'Stop Recording' : 'Start Recording'}
+                    </button>
+                    <button
+                      onClick={resetAll}
+                      disabled={isRecording}
+                      className="btn btn-gray"
+                    >
+                      <RotateCcw />
+                      Reset All
+                    </button>
+                  </div>
+
+                  {isRecording && (
+                    <div style={{marginBottom: '16px'}}>
+                      <label className="label">Type here (focus on this box):</label>
+                      <div className="prompt-box">
+                        <p className="prompt-text">Please type: <span className="prompt-content">{textToType}</span></p>
+                      </div>
+                      <textarea
+                        className="textarea"
+                        value={typedText}
+                        onChange={(e) => setTypedText(e.target.value)}
+                        placeholder="Start typing here..."
+                        rows="4"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+
+                  <div className="stats">
+                    <div className="stat-card stat-blue">
+                      <div className="stat-number">{sessionData.length}</div>
+                      <div className="stat-label">Sessions Completed</div>
+                    </div>
+                    <div className="stat-card stat-green">
+                      <div className="stat-number">{keystrokeData.length}</div>
+                      <div className="stat-label">Current Keystrokes</div>
+                    </div>
+                    <div className="stat-card stat-purple">
+                      <div className="stat-number">
+                        {sessionData.reduce((sum, s) => sum + s.keystrokeCount, 0)}
+                      </div>
+                      <div className="stat-label">Total Keystrokes</div>
+                    </div>
+                  </div>
+
+                  <div className="btn-group">
+                    <button
+                      onClick={downloadJSON}
+                      disabled={sessionData.length === 0}
+                      className="btn btn-indigo"
+                    >
+                      <Download />
+                      Download JSON
+                    </button>
+                    <button
+                      onClick={downloadCSV}
+                      disabled={sessionData.length === 0}
+                      className="btn btn-indigo"
+                    >
+                      <Download />
+                      Download CSV
+                    </button>
+                  </div>
+                </div>
+
+                {sessionData.length > 0 && (
+                  <div className="card">
+                    <h2>Collected Sessions</h2>
+                    <div className="session-list">
+                      {sessionData.map((session, idx) => (
+                        <div key={idx} className="session-item">
+                          <div className="session-header">
+                            <div>
+                              <div className="session-title">Session {session.session}</div>
+                              <div className="session-details">
+                                {session.keystrokeCount} keystrokes | User: {session.userId}
+                              </div>
+                            </div>
+                            <div className="session-id">
+                              ID: {session.sessionId}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<KeystrokeCollector />);
+    </script>
+</body>
+</html>
