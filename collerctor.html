@@ -35,6 +35,8 @@
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .textarea { width: 100%; padding: 12px 16px; border: 2px solid #3B82F6; border-radius: 8px; font-family: monospace; font-size: 14px; resize: vertical; }
         .textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .textarea.error { border-color: #EF4444; background: #FEF2F2; }
+        .textarea.success { border-color: #10B981; background: #ECFDF5; }
         .prompt-box { background: #FFFBEB; border: 2px solid #FBBF24; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
         .prompt-text { font-size: 14px; color: #6B7280; }
         .prompt-content { font-family: monospace; font-weight: 600; }
@@ -61,6 +63,10 @@
         .show-instructions:hover { color: #1D4ED8; }
         .flex-center { display: flex; align-items: flex-start; }
         .icon-wrapper { margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
+        .error-message { background: #FEF2F2; border: 1px solid #FCA5A5; color: #DC2626; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+        .success-message { background: #ECFDF5; border: 1px solid #6EE7B7; color: #059669; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+        .progress-bar { background: #E5E7EB; height: 8px; border-radius: 4px; margin-bottom: 12px; overflow: hidden; }
+        .progress-fill { background: #10B981; height: 100%; transition: width 0.3s; }
     </style>
 </head>
 <body>
@@ -103,20 +109,44 @@
         const KeystrokeCollector = () => {
           const [isRecording, setIsRecording] = useState(false);
           const [keystrokeData, setKeystrokeData] = useState([]);
+          const [currentPhraseKeystrokes, setCurrentPhraseKeystrokes] = useState([]);
           const [sessionData, setSessionData] = useState([]);
-          const [currentSession, setCurrentSession] = useState(1);
+          const [completedPhrases, setCompletedPhrases] = useState(0);
           const [userId, setUserId] = useState('');
           const [textToType, setTextToType] = useState('The quick brown fox jumps over the lazy dog');
           const [typedText, setTypedText] = useState('');
           const [showInstructions, setShowInstructions] = useState(true);
+          const [errorMessage, setErrorMessage] = useState('');
+          const [successMessage, setSuccessMessage] = useState('');
+          const [inputStatus, setInputStatus] = useState(''); // '', 'error', 'success'
           
           const keyPressTime = useRef({});
           const sessionId = useRef(Date.now());
+          const minPhrases = 10;
+
+          const normalizeText = (text) => {
+            return text.trim().toLowerCase().replace(/\s+/g, ' ');
+          };
 
           const handleKeyDown = (e) => {
             if (!isRecording) return;
+            
             const key = e.key;
             const timestamp = Date.now();
+
+                // reset if Backspace is pressed
+            if (key === "Backspace") {
+                setTypedText("");
+                setCurrentPhraseKeystrokes([]);
+                keyPressTime.current = {};  // Clear pressed keys timing
+                setErrorMessage("↺ Backspace pressed — phrase reset!");
+                setSuccessMessage("");
+                setInputStatus("error");
+
+                e.preventDefault(); // Stop backspace from modifying the textarea
+                return;
+            }
+            
             if (!keyPressTime.current[key]) {
               keyPressTime.current[key] = timestamp;
             }
@@ -124,13 +154,14 @@
 
           const handleKeyUp = (e) => {
             if (!isRecording) return;
+            
             const key = e.key;
             const releaseTime = Date.now();
             const pressTime = keyPressTime.current[key];
             
             if (pressTime) {
               const dwellTime = releaseTime - pressTime;
-              const prevKeystroke = keystrokeData[keystrokeData.length - 1];
+              const prevKeystroke = currentPhraseKeystrokes[currentPhraseKeystrokes.length - 1];
               const flightTime = prevKeystroke ? pressTime - prevKeystroke.releaseTime : 0;
               
               const keystroke = {
@@ -141,11 +172,75 @@
                 releaseTime: releaseTime,
                 dwellTime: dwellTime,
                 flightTime: flightTime,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                phraseNumber: completedPhrases + 1
               };
               
-              setKeystrokeData(prev => [...prev, keystroke]);
+              setCurrentPhraseKeystrokes(prev => [...prev, keystroke]);
               delete keyPressTime.current[key];
+            }
+          };
+
+          const validateAndSubmitPhrase = () => {
+            const normalized = normalizeText(typedText);
+            const expected = normalizeText(textToType);
+            
+            if (normalized === expected) {
+              // Correct phrase - save it
+              setKeystrokeData(prev => [...prev, ...currentPhraseKeystrokes]);
+              setCompletedPhrases(prev => prev + 1);
+              setSuccessMessage(`✓ Phrase ${completedPhrases + 1} recorded successfully!`);
+              setErrorMessage('');
+              setInputStatus('success');
+              
+              // Clear for next phrase
+              setTimeout(() => {
+                setTypedText('');
+                setCurrentPhraseKeystrokes([]);
+                setSuccessMessage('');
+                setInputStatus('');
+              }, 1000);
+            } else {
+              // Incorrect phrase - reset
+              setErrorMessage('✗ Incorrect phrase! Please type it exactly. Resetting...');
+              setSuccessMessage('');
+              setInputStatus('error');
+              setCurrentPhraseKeystrokes([]);
+              
+              setTimeout(() => {
+                setTypedText('');
+                setErrorMessage('');
+                setInputStatus('');
+              }, 1500);
+            }
+          };
+
+          const handleTextChange = (e) => {
+            const newText = e.target.value;
+            
+            // Check if Enter was pressed (newline added)
+            if (newText.includes('\n')) {
+              validateAndSubmitPhrase();
+              return;
+            }
+            
+            setTypedText(newText);
+            
+            // Real-time validation feedback
+            const normalized = normalizeText(newText);
+            const expected = normalizeText(textToType);
+            
+            if (normalized.length > 0) {
+              if (expected.startsWith(normalized)) {
+                setInputStatus('');
+                setErrorMessage('');
+              } else {
+                setInputStatus('error');
+                setErrorMessage('⚠ You are making a mistake! Text doesn\'t match.');
+              }
+            } else {
+              setInputStatus('');
+              setErrorMessage('');
             }
           };
 
@@ -156,30 +251,46 @@
             }
             setIsRecording(true);
             setKeystrokeData([]);
+            setCurrentPhraseKeystrokes([]);
+            setCompletedPhrases(0);
             setTypedText('');
+            setErrorMessage('');
+            setSuccessMessage('');
             sessionId.current = Date.now();
           };
 
           const stopRecording = () => {
+            if (completedPhrases < minPhrases) {
+              const shouldStop = window.confirm(
+                `You have only completed ${completedPhrases} phrases. Minimum ${minPhrases} required.\n\nDo you want to stop anyway?`
+              );
+              if (!shouldStop) return;
+            }
+            
             setIsRecording(false);
+            
             if (keystrokeData.length > 0) {
               setSessionData(prev => [...prev, {
-                session: currentSession,
                 sessionId: sessionId.current,
                 userId: userId,
                 keystrokeCount: keystrokeData.length,
+                phrasesCompleted: completedPhrases,
                 data: [...keystrokeData]
               }]);
-              setCurrentSession(prev => prev + 1);
+              
+              setSuccessMessage(`✓ Session completed with ${completedPhrases} phrases!`);
             }
           };
 
           const resetAll = () => {
             setIsRecording(false);
             setKeystrokeData([]);
+            setCurrentPhraseKeystrokes([]);
             setSessionData([]);
-            setCurrentSession(1);
+            setCompletedPhrases(0);
             setTypedText('');
+            setErrorMessage('');
+            setSuccessMessage('');
             keyPressTime.current = {};
           };
 
@@ -214,12 +325,12 @@
               return;
             }
 
-            const headers = ['sessionId', 'userId', 'session', 'key', 'pressTime', 'releaseTime', 'dwellTime', 'flightTime', 'timestamp'];
+            const headers = ['sessionId', 'userId', 'phraseNumber', 'key', 'pressTime', 'releaseTime', 'dwellTime', 'flightTime', 'timestamp'];
             const rows = sessionData.flatMap(session => 
               session.data.map(ks => [
                 ks.sessionId,
                 ks.userId,
-                session.session,
+                ks.phraseNumber,
                 ks.key,
                 ks.pressTime,
                 ks.releaseTime,
@@ -253,7 +364,9 @@
               window.removeEventListener('keydown', handleKeyDown);
               window.removeEventListener('keyup', handleKeyUp);
             };
-          }, [isRecording, keystrokeData]);
+          }, [isRecording, currentPhraseKeystrokes]);
+
+          const progressPercentage = Math.min((completedPhrases / minPhrases) * 100, 100);
 
           return (
             <div className="container">
@@ -272,9 +385,11 @@
                         <ol className="info-list">
                           <li>Enter a unique User ID (e.g., user001, john_doe)</li>
                           <li>Click "Start Recording" to begin capturing keystrokes</li>
-                          <li>Type the displayed text in the input box below</li>
-                          <li>Click "Stop Recording" when finished</li>
-                          <li>Repeat 10-15 times for the same user (multiple sessions)</li>
+                          <li>Type the displayed phrase exactly as shown</li>
+                          <li>Press ENTER after each phrase to submit it</li>
+                          <li>If you make a mistake, press Backspace and the phrase will reset automatically</li>
+                          <li>Complete at least {minPhrases} correct phrases</li>
+                          <li>Click "Stop Recording" when you've completed enough phrases</li>
                           <li>Download data as JSON or CSV format</li>
                         </ol>
                         <button className="btn-link" onClick={() => setShowInstructions(false)}>
@@ -336,15 +451,31 @@
 
                   {isRecording && (
                     <div style={{marginBottom: '16px'}}>
-                      <label className="label">Type here (focus on this box):</label>
+                      <label className="label">
+                        Type here (press ENTER after each phrase):
+                      </label>
+                      
+                      <div className="progress-bar">
+                        <div className="progress-fill" style={{width: `${progressPercentage}%`}}></div>
+                      </div>
+                      
+                      <div style={{marginBottom: '8px', fontSize: '14px', color: '#6B7280'}}>
+                        Progress: {completedPhrases} / {minPhrases} phrases completed
+                        {completedPhrases >= minPhrases && <span style={{color: '#10B981', fontWeight: 'bold', marginLeft: '8px'}}>✓ Ready to stop!</span>}
+                      </div>
+                      
                       <div className="prompt-box">
                         <p className="prompt-text">Please type: <span className="prompt-content">{textToType}</span></p>
                       </div>
+                      
+                      {errorMessage && <div className="error-message">{errorMessage}</div>}
+                      {successMessage && <div className="success-message">{successMessage}</div>}
+                      
                       <textarea
-                        className="textarea"
+                        className={`textarea ${inputStatus}`}
                         value={typedText}
-                        onChange={(e) => setTypedText(e.target.value)}
-                        placeholder="Start typing here..."
+                        onChange={handleTextChange}
+                        placeholder="Start typing here... Press ENTER when done"
                         rows="4"
                         autoFocus
                       />
@@ -357,12 +488,12 @@
                       <div className="stat-label">Sessions Completed</div>
                     </div>
                     <div className="stat-card stat-green">
-                      <div className="stat-number">{keystrokeData.length}</div>
-                      <div className="stat-label">Current Keystrokes</div>
+                      <div className="stat-number">{completedPhrases}</div>
+                      <div className="stat-label">Phrases This Session</div>
                     </div>
                     <div className="stat-card stat-purple">
                       <div className="stat-number">
-                        {sessionData.reduce((sum, s) => sum + s.keystrokeCount, 0)}
+                        {sessionData.reduce((sum, s) => sum + s.keystrokeCount, 0) + keystrokeData.length}
                       </div>
                       <div className="stat-label">Total Keystrokes</div>
                     </div>
@@ -396,9 +527,9 @@
                         <div key={idx} className="session-item">
                           <div className="session-header">
                             <div>
-                              <div className="session-title">Session {session.session}</div>
+                              <div className="session-title">Session {idx + 1}</div>
                               <div className="session-details">
-                                {session.keystrokeCount} keystrokes | User: {session.userId}
+                                {session.phrasesCompleted} phrases | {session.keystrokeCount} keystrokes | User: {session.userId}
                               </div>
                             </div>
                             <div className="session-id">
