@@ -133,19 +133,6 @@
             
             const key = e.key;
             const timestamp = Date.now();
-
-                // reset if Backspace is pressed
-            if (key === "Backspace") {
-                setTypedText("");
-                setCurrentPhraseKeystrokes([]);
-                keyPressTime.current = {};  // Clear pressed keys timing
-                setErrorMessage("↺ Backspace pressed — phrase reset!");
-                setSuccessMessage("");
-                setInputStatus("error");
-
-                e.preventDefault(); // Stop backspace from modifying the textarea
-                return;
-            }
             
             if (!keyPressTime.current[key]) {
               keyPressTime.current[key] = timestamp;
@@ -212,6 +199,26 @@
                 setErrorMessage('');
                 setInputStatus('');
               }, 1500);
+            }
+          };
+
+          const handleKeyPress = (e) => {
+            if (!isRecording) return;
+            
+            // Check for Backspace
+            if (e.key === 'Backspace') {
+              // Reset the current attempt
+              setTypedText('');
+              setCurrentPhraseKeystrokes([]);
+              setErrorMessage('⟲ Backspace pressed - Phrase attempt reset!');
+              setInputStatus('');
+              
+              setTimeout(() => {
+                setErrorMessage('');
+              }, 1500);
+              
+              e.preventDefault();
+              return;
             }
           };
 
@@ -358,11 +365,13 @@
             if (isRecording) {
               window.addEventListener('keydown', handleKeyDown);
               window.addEventListener('keyup', handleKeyUp);
+              window.addEventListener('keydown', handleKeyPress);
             }
 
             return () => {
               window.removeEventListener('keydown', handleKeyDown);
               window.removeEventListener('keyup', handleKeyUp);
+              window.removeEventListener('keydown', handleKeyPress);
             };
           }, [isRecording, currentPhraseKeystrokes]);
 
@@ -386,8 +395,8 @@
                           <li>Enter a unique User ID (e.g., user001, john_doe)</li>
                           <li>Click "Start Recording" to begin capturing keystrokes</li>
                           <li>Type the displayed phrase exactly as shown</li>
+                          <li><strong>Press BACKSPACE to restart the current phrase if you make ANY mistake</strong></li>
                           <li>Press ENTER after each phrase to submit it</li>
-                          <li>If you make a mistake, press Backspace and the phrase will reset automatically</li>
                           <li>Complete at least {minPhrases} correct phrases</li>
                           <li>Click "Stop Recording" when you've completed enough phrases</li>
                           <li>Download data as JSON or CSV format</li>
@@ -452,7 +461,7 @@
                   {isRecording && (
                     <div style={{marginBottom: '16px'}}>
                       <label className="label">
-                        Type here (press ENTER after each phrase):
+                        Type here (press BACKSPACE to restart, ENTER to submit):
                       </label>
                       
                       <div className="progress-bar">
@@ -475,7 +484,7 @@
                         className={`textarea ${inputStatus}`}
                         value={typedText}
                         onChange={handleTextChange}
-                        placeholder="Start typing here... Press ENTER when done"
+                        placeholder="Start typing here... BACKSPACE=restart | ENTER=submit"
                         rows="4"
                         autoFocus
                       />
