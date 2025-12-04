@@ -132,6 +132,10 @@
             if (!isRecording) return;
             
             const key = e.key;
+            
+            // Don't record Enter or Backspace keystrokes - they're control keys
+            if (key === 'Enter' || key === 'Backspace') return;
+            
             const timestamp = Date.now();
             
             if (!keyPressTime.current[key]) {
@@ -143,6 +147,10 @@
             if (!isRecording) return;
             
             const key = e.key;
+            
+            // Don't record Enter or Backspace keystrokes - they're control keys
+            if (key === 'Enter' || key === 'Backspace') return;
+            
             const releaseTime = Date.now();
             const pressTime = keyPressTime.current[key];
             
@@ -169,6 +177,15 @@
           };
 
           const validateAndSubmitPhrase = () => {
+            // Don't validate if there's no text or no keystrokes recorded
+            if (typedText.trim().length === 0 || currentPhraseKeystrokes.length === 0) {
+              setErrorMessage('⚠ Please type the phrase before submitting!');
+              setTimeout(() => {
+                setErrorMessage('');
+              }, 1500);
+              return;
+            }
+            
             const normalized = normalizeText(typedText);
             const expected = normalizeText(textToType);
             
