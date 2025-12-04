@@ -3,6 +3,8 @@ Keystroke Dynamics - Model Training and Authentication
 This script trains authentication models and evaluates performance
 """
 
+#tTO DO: ADD authenticate_multi_phrase
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
