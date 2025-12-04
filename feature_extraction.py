@@ -1,6 +1,7 @@
 """
 Keystroke Dynamics - Feature Extraction and Preprocessing
 This script processes the collected keystroke data and extracts features for authentication
+Updated to handle multiple phrases per session with phraseNumber
 """
 
 import json
@@ -32,31 +33,22 @@ class KeystrokeFeatureExtractor:
         print(f"✓ Total sessions: {self.raw_data['metadata']['totalSessions']}")
         return self.raw_data
     
-    def extract_basic_features(self, session_data):
+    def extract_phrase_features(self, phrase_keystrokes):
         """
-        Extract basic timing features from a single session
-        
-        Features extracted:
-        - Dwell times (hold times) statistics
-        - Flight times (inter-key delays) statistics
-        - Digraph timings
-        - Typing speed
-        - Key press patterns
+        Extract features from a single phrase
         
         Args:
-            session_data: Dictionary containing keystroke data for one session
+            phrase_keystrokes: List of keystroke data for one phrase
             
         Returns:
             Dictionary of extracted features
         """
-        keystrokes = session_data['data']
-        
-        if len(keystrokes) == 0:
+        if len(phrase_keystrokes) == 0:
             return None
         
         # Extract timing arrays
-        dwell_times = [ks['dwellTime'] for ks in keystrokes]
-        flight_times = [ks['flightTime'] for ks in keystrokes if ks['flightTime'] > 0]
+        dwell_times = [ks['dwellTime'] for ks in phrase_keystrokes]
+        flight_times = [ks['flightTime'] for ks in phrase_keystrokes if ks['flightTime'] > 0]
         
         features = {}
         
@@ -88,44 +80,79 @@ class KeystrokeFeatureExtractor:
             features['flight_q75'] = 0
         
         # Typing speed (characters per second)
-        total_time = keystrokes[-1]['releaseTime'] - keystrokes[0]['pressTime']
-        features['typing_speed'] = (len(keystrokes) / total_time) * 1000  # Convert to chars/sec
+        total_time = phrase_keystrokes[-1]['releaseTime'] - phrase_keystrokes[0]['pressTime']
+        features['typing_speed'] = (len(phrase_keystrokes) / total_time) * 1000  # Convert to chars/sec
         
-        # Total keystrokes
-        features['total_keystrokes'] = len(keystrokes)
+        # Total keystrokes in phrase
+        features['total_keystrokes'] = len(phrase_keystrokes)
         
         # Ratio features
         features['dwell_flight_ratio'] = features['dwell_mean'] / (features['flight_mean'] + 1)
         
-        # Session metadata
-        features['session_id'] = session_data['sessionId']
-        features['session_number'] = session_data['session']
-        features['user_id'] = session_data['userId']
-        
         return features
     
-    def extract_digraph_features(self, session_data, top_n=10):
+    def extract_basic_features(self, session_data):
+        """
+        Extract basic timing features from a single session
+        Now handles multiple phrases per session
+        
+        Args:
+            session_data: Dictionary containing keystroke data for one session
+            
+        Returns:
+            List of feature dictionaries (one per phrase)
+        """
+        keystrokes = session_data['data']
+        
+        if len(keystrokes) == 0:
+            return []
+        
+        # Group keystrokes by phraseNumber
+        phrases = {}
+        for ks in keystrokes:
+            phrase_num = ks.get('phraseNumber', 1)  # Default to 1 if not present
+            if phrase_num not in phrases:
+                phrases[phrase_num] = []
+            phrases[phrase_num].append(ks)
+        
+        # Extract features for each phrase
+        all_phrase_features = []
+        for phrase_num in sorted(phrases.keys()):
+            phrase_keystrokes = phrases[phrase_num]
+            phrase_features = self.extract_phrase_features(phrase_keystrokes)
+            
+            if phrase_features is not None:
+                # Add metadata
+                phrase_features['session_id'] = session_data['sessionId']
+                phrase_features['phrase_number'] = phrase_num
+                phrase_features['user_id'] = session_data['userId']
+                phrase_features['phrases_in_session'] = session_data.get('phrasesCompleted', len(phrases))
+                
+                all_phrase_features.append(phrase_features)
+        
+        return all_phrase_features
+    
+    def extract_digraph_features(self, phrase_keystrokes, top_n=10):
         """
         Extract features from specific key pair (digraph) timings
         
         Args:
-            session_data: Dictionary containing keystroke data
+            phrase_keystrokes: List of keystroke data for one phrase
             top_n: Number of most common digraphs to extract
             
         Returns:
             Dictionary of digraph features
         """
-        keystrokes = session_data['data']
         digraph_times = {}
         
         # Calculate digraph timings
-        for i in range(len(keystrokes) - 1):
-            key1 = keystrokes[i]['key']
-            key2 = keystrokes[i + 1]['key']
+        for i in range(len(phrase_keystrokes) - 1):
+            key1 = phrase_keystrokes[i]['key']
+            key2 = phrase_keystrokes[i + 1]['key']
             digraph = f"{key1}-{key2}"
             
             # Time between pressing key1 and pressing key2
-            timing = keystrokes[i + 1]['pressTime'] - keystrokes[i]['pressTime']
+            timing = phrase_keystrokes[i + 1]['pressTime'] - phrase_keystrokes[i]['pressTime']
             
             if digraph not in digraph_times:
                 digraph_times[digraph] = []
@@ -144,22 +171,26 @@ class KeystrokeFeatureExtractor:
         return digraph_features
     
     def extract_all_features(self):
-        """Extract features from all sessions"""
+        """Extract features from all sessions and phrases"""
         if self.raw_data is None:
             self.load_data()
         
         all_features = []
         
         for session in self.raw_data['sessions']:
-            # Extract basic features
-            basic_features = self.extract_basic_features(session)
-            
-            if basic_features is not None:
-                all_features.append(basic_features)
+            # Extract features for each phrase in the session
+            phrase_features_list = self.extract_basic_features(session)
+            all_features.extend(phrase_features_list)
         
         self.features_df = pd.DataFrame(all_features)
-        print(f"\n✓ Extracted {len(self.features_df)} feature sets")
-        print(f"✓ Total features per session: {len(self.features_df.columns) - 3}")  # Excluding metadata
+        
+        total_phrases = len(self.features_df)
+        total_sessions = len(self.raw_data['sessions'])
+        avg_phrases = total_phrases / total_sessions if total_sessions > 0 else 0
+        
+        print(f"\n✓ Extracted features from {total_phrases} phrases across {total_sessions} sessions")
+        print(f"✓ Average phrases per session: {avg_phrases:.1f}")
+        print(f"✓ Features per phrase: {len(self.features_df.columns) - 4}")  # Excluding metadata
         
         return self.features_df
     
@@ -182,11 +213,12 @@ class KeystrokeFeatureExtractor:
         
         # Exclude metadata columns
         feature_cols = [col for col in self.features_df.columns 
-                       if col not in ['session_id', 'session_number', 'user_id']]
+                       if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         
         print(f"\nUser ID: {self.features_df['user_id'].iloc[0]}")
-        print(f"Number of sessions: {len(self.features_df)}")
-        print(f"Number of features: {len(feature_cols)}")
+        print(f"Number of phrases: {len(self.features_df)}")
+        print(f"Number of sessions: {self.features_df['session_id'].nunique()}")
+        print(f"Number of features per phrase: {len(feature_cols)}")
         
         print("\nKey Feature Statistics:")
         print("-" * 60)
@@ -214,7 +246,7 @@ class KeystrokePreprocessor:
     def identify_feature_columns(self):
         """Identify which columns are features (exclude metadata)"""
         self.feature_columns = [col for col in self.features_df.columns 
-                               if col not in ['session_id', 'session_number', 'user_id']]
+                               if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         return self.feature_columns
     
     def handle_outliers(self, method='iqr', threshold=1.5):
@@ -250,8 +282,8 @@ class KeystrokePreprocessor:
             self.features_df = self.features_df[(z_scores < threshold).all(axis=1)]
         
         removed = original_count - len(self.features_df)
-        print(f"\n✓ Removed {removed} outlier sessions")
-        print(f"✓ Remaining sessions: {len(self.features_df)}")
+        print(f"\n✓ Removed {removed} outlier phrases")
+        print(f"✓ Remaining phrases: {len(self.features_df)}")
         
         return self.features_df
     
@@ -289,7 +321,7 @@ class KeystrokePreprocessor:
             random_state: Random seed for reproducibility
             
         Returns:
-            X_train, X_test, y_train, y_test (but y is just user_id)
+            X_train, X_test, y_train, y_test
         """
         from sklearn.model_selection import train_test_split
         
@@ -303,7 +335,7 @@ class KeystrokePreprocessor:
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
         
-        print(f"\n✓ Data split: {len(X_train)} training, {len(X_test)} testing samples")
+        print(f"\n✓ Data split: {len(X_train)} training, {len(X_test)} testing phrases")
         
         return X_train, X_test, y_train, y_test
 
