@@ -132,14 +132,16 @@
             if (!isRecording) return;
             
             const key = e.key;
+            const code = e.code;
             
-            // Don't record Enter or Backspace keystrokes - they're control keys
-            if (key === 'Enter' || key === 'Backspace') return;
+            // Don't record Enter, Backspace, or modifier keys
+            if (key === 'Enter' || key === 'Backspace' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
             
             const timestamp = Date.now();
             
-            if (!keyPressTime.current[key]) {
-              keyPressTime.current[key] = timestamp;
+            // Use code as the tracking key to handle shift properly
+            if (!keyPressTime.current[code]) {
+              keyPressTime.current[code] = timestamp;
             }
           };
 
@@ -147,12 +149,13 @@
             if (!isRecording) return;
             
             const key = e.key;
+            const code = e.code;
             
-            // Don't record Enter or Backspace keystrokes - they're control keys
-            if (key === 'Enter' || key === 'Backspace') return;
+            // Don't record Enter, Backspace, or modifier keys
+            if (key === 'Enter' || key === 'Backspace' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
             
             const releaseTime = Date.now();
-            const pressTime = keyPressTime.current[key];
+            const pressTime = keyPressTime.current[code];
             
             if (pressTime) {
               const dwellTime = releaseTime - pressTime;
@@ -162,7 +165,7 @@
               const keystroke = {
                 sessionId: sessionId.current,
                 userId: userId,
-                key: key.length === 1 ? key : `[${key}]`,
+                key: key.length === 1 ? key : `[${key}]`, // Use the key from keyUp (what actually appeared)
                 pressTime: pressTime,
                 releaseTime: releaseTime,
                 dwellTime: dwellTime,
@@ -172,7 +175,7 @@
               };
               
               setCurrentPhraseKeystrokes(prev => [...prev, keystroke]);
-              delete keyPressTime.current[key];
+              delete keyPressTime.current[code];
             }
           };
 
