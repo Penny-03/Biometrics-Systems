@@ -1,9 +1,8 @@
 """
 Keystroke Dynamics - Model Training and Authentication
 This script trains authentication models and evaluates performance
+Updated to handle phrase-based features
 """
-
-#tTO DO: ADD authenticate_multi_phrase
 
 import numpy as np
 import pandas as pd
@@ -32,7 +31,7 @@ class KeystrokeAuthenticator:
         self.model = None
         self.model_type = None
         self.feature_columns = [col for col in features_df.columns 
-                               if col not in ['session_id', 'session_number', 'user_id']]
+                               if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         
     def train_one_class_svm(self, nu=0.1, kernel='rbf', gamma='auto'):
         """
@@ -61,7 +60,7 @@ class KeystrokeAuthenticator:
         accuracy = np.sum(predictions == 1) / len(predictions)
         
         print(f"\n✓ Model trained successfully")
-        print(f"✓ Training samples: {len(X)}")
+        print(f"✓ Training phrases: {len(X)}")
         print(f"✓ Features used: {len(self.feature_columns)}")
         print(f"✓ Training accuracy: {accuracy*100:.2f}%")
         
@@ -97,7 +96,7 @@ class KeystrokeAuthenticator:
         accuracy = np.sum(predictions == 1) / len(predictions)
         
         print(f"\n✓ Model trained successfully")
-        print(f"✓ Training samples: {len(X)}")
+        print(f"✓ Training phrases: {len(X)}")
         print(f"✓ Features used: {len(self.feature_columns)}")
         print(f"✓ Training accuracy: {accuracy*100:.2f}%")
         
@@ -124,7 +123,7 @@ class KeystrokeAuthenticator:
         self.model_type = 'DistanceBased'
         
         print(f"\n✓ Template created successfully")
-        print(f"✓ Training samples: {len(X)}")
+        print(f"✓ Training phrases: {len(X)}")
         print(f"✓ Features in template: {len(self.template)}")
         print(f"✓ Distance metric: {metric}")
         
@@ -135,7 +134,7 @@ class KeystrokeAuthenticator:
         Authenticate a new typing sample
         
         Args:
-            new_features: Feature vector for new sample
+            new_features: Feature vector for new sample (single phrase)
             threshold: Decision threshold (auto-calculated if None)
             
         Returns:
@@ -157,6 +156,25 @@ class KeystrokeAuthenticator:
                 threshold = np.mean(self.template_std) * 3
             
             return distance < threshold
+    
+    def authenticate_multi_phrase(self, features_list, threshold=0.5):
+        """
+        Authenticate using multiple phrases (majority voting)
+        
+        Args:
+            features_list: List of feature vectors (one per phrase)
+            threshold: Proportion of phrases that must be genuine (0-1)
+            
+        Returns:
+            Boolean (True = Genuine, False = Impostor)
+        """
+        if len(features_list) == 0:
+            return False
+        
+        genuine_count = sum(1 for features in features_list if self.authenticate(features))
+        genuine_ratio = genuine_count / len(features_list)
+        
+        return genuine_ratio >= threshold
     
     def evaluate_with_impostors(self, impostor_features_df):
         """
@@ -208,8 +226,8 @@ class KeystrokeAuthenticator:
             'False Negatives': fn
         }
         
-        print(f"\nGenuine samples: {len(X_genuine)}")
-        print(f"Impostor samples: {len(X_impostor)}")
+        print(f"\nGenuine phrases: {len(X_genuine)}")
+        print(f"Impostor phrases: {len(X_impostor)}")
         print(f"\nRESULTS:")
         print(f"  Accuracy:  {accuracy*100:.2f}%")
         print(f"  FAR:       {far*100:.2f}%  (Impostors accepted)")
@@ -290,6 +308,8 @@ if __name__ == "__main__":
     # Load preprocessed features
     features_df = pd.read_csv("keystroke_features.csv")
     
+    print(f"Loaded {len(features_df)} phrases for training")
+    
     # Initialize authenticator
     authenticator = KeystrokeAuthenticator(features_df)
     
@@ -315,7 +335,12 @@ if __name__ == "__main__":
     print("✓ Model saved and ready for authentication")
     print("="*60)
     
-    # Example: Authenticate a new sample
-    # new_sample_features = [...]  # Feature vector from new typing session
-    # is_genuine = authenticator.authenticate(new_sample_features)
+    # Example: Authenticate a new sample (single phrase)
+    # new_phrase_features = [...]  # Feature vector from new phrase
+    # is_genuine = authenticator.authenticate(new_phrase_features)
     # print(f"Authentication result: {'Genuine' if is_genuine else 'Impostor'}")
+    
+    # Example: Authenticate with multiple phrases (more robust)
+    # phrases_features = [[...], [...], [...]]  # Multiple phrase feature vectors
+    # is_genuine = authenticator.authenticate_multi_phrase(phrases_features, threshold=0.7)
+    # print(f"Multi-phrase result: {'Genuine' if is_genuine else 'Impostor'}")
