@@ -1,6 +1,6 @@
 """
 Keystroke Authentication Demo
-This script demonstrates how to authenticate users with the trained model
+Updated for enhanced features and proper scaler handling
 """
 
 from model_training import KeystrokeAuthenticator
@@ -8,14 +8,17 @@ from feature_extraction import KeystrokeFeatureExtractor, KeystrokePreprocessor
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import pickle
 
-def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", use_multi_phrase=True, threshold=0.7):
+def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", 
+                     scaler_path="scaler.pkl", use_multi_phrase=True, threshold=0.7):
     """
     Authenticate a user based on their typing sample
     
     Args:
         json_file_path: Path to JSON file with new typing data
         model_path: Path to trained model
+        scaler_path: Path to saved scaler
         use_multi_phrase: Use multiple phrases for voting (more accurate)
         threshold: Proportion of phrases that must match (0.5-1.0)
         
@@ -34,13 +37,23 @@ def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", use
     if not Path(model_path).exists():
         return {"error": "Model file not found", "authenticated": False}
     
-    # Step 2: Load the trained model
-    print("\n1. Loading trained model...")
-    # Create a dummy dataframe just to initialize
+    if not Path(scaler_path).exists():
+        return {"error": "Scaler file not found", "authenticated": False}
+    
+    # Step 2: Load the trained model and scaler
+    print("\n1. Loading trained model and scaler...")
     dummy_df = pd.DataFrame(columns=['user_id', 'session_id', 'phrase_number'])
     authenticator = KeystrokeAuthenticator(dummy_df)
     authenticator.load_model(model_path)
+    
+    # Load scaler
+    with open(scaler_path, 'rb') as f:
+        scaler_data = pickle.load(f)
+        fitted_scaler = scaler_data['scaler']
+        training_columns = scaler_data['feature_columns']
+    
     print(f"   ✓ Model loaded: {authenticator.model_type}")
+    print(f"   ✓ Scaler loaded with {len(training_columns)} features")
     
     # Step 3: Extract features from new typing sample
     print("\n2. Processing new typing sample...")
@@ -53,12 +66,19 @@ def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", use
     
     print(f"   ✓ Extracted features from {len(raw_features)} phrases")
     
-    # Step 4: Preprocess features (same as training)
+    # Step 4: Preprocess features (CRITICAL: same as training!)
     print("\n3. Preprocessing features...")
     preprocessor = KeystrokePreprocessor(raw_features)
     preprocessor.identify_feature_columns()
-    preprocessor.normalize_features(method='standard')
+    
+    # CRITICAL: Align columns to match training data
+    preprocessor.align_columns(training_columns)
+    
+    # CRITICAL: Use fitted scaler (DO NOT REFIT!)
+    preprocessor.transform_with_scaler(fitted_scaler)
     processed_features = preprocessor.features_df
+    
+    print(f"   ✓ Features aligned and normalized")
     
     # Step 5: Authenticate
     print("\n4. Authenticating...")
@@ -73,7 +93,7 @@ def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", use
             for i in range(len(processed_features))
         ]
         
-        # Authenticate each phrase and collect results
+        # Authenticate each phrase
         phrase_results = []
         for i, features in enumerate(features_list):
             result = authenticator.authenticate(features)
@@ -133,13 +153,15 @@ def authenticate_user(json_file_path, model_path="keystroke_auth_model.pkl", use
     return result
 
 
-def batch_authenticate(json_files, model_path="keystroke_auth_model.pkl"):
+def batch_authenticate(json_files, model_path="keystroke_auth_model.pkl", 
+                       scaler_path="scaler.pkl"):
     """
     Authenticate multiple users in batch
     
     Args:
         json_files: List of JSON file paths
         model_path: Path to trained model
+        scaler_path: Path to saved scaler
         
     Returns:
         List of results
@@ -153,7 +175,7 @@ def batch_authenticate(json_files, model_path="keystroke_auth_model.pkl"):
     
     for i, json_file in enumerate(json_files, 1):
         print(f"\n[{i}/{len(json_files)}] Processing: {json_file}")
-        result = authenticate_user(json_file, model_path, use_multi_phrase=True)
+        result = authenticate_user(json_file, model_path, scaler_path, use_multi_phrase=True)
         result['file'] = json_file
         results.append(result)
     
@@ -180,17 +202,22 @@ if __name__ == "__main__":
     print("KEYSTROKE DYNAMICS - AUTHENTICATION SYSTEM")
     print("="*70)
     
-    # Check if model exists
+    # Check if required files exist
     if not Path("keystroke_auth_model.pkl").exists():
         print("\n❌ Error: Model file 'keystroke_auth_model.pkl' not found!")
-        print("   Please train a model first by running 'pipeline.py'")
+        print("   Please train a model first by running 'python pipeline.py'")
+        sys.exit(1)
+    
+    if not Path("scaler.pkl").exists():
+        print("\n❌ Error: Scaler file 'scaler.pkl' not found!")
+        print("   Please train a model first by running 'python pipeline.py'")
         sys.exit(1)
     
     # Interactive mode
     print("\nAuthentication Options:")
     print("1. Authenticate single user")
     print("2. Batch authenticate multiple users")
-    print("3. Test with example")
+    print("3. Show usage example")
     
     choice = input("\nEnter choice (1-3): ").strip()
     
@@ -207,7 +234,7 @@ if __name__ == "__main__":
             thresh_input = input("Enter voting threshold (0.5-1.0) [default: 0.7]: ").strip()
             try:
                 threshold = float(thresh_input) if thresh_input else 0.7
-                threshold = max(0.5, min(1.0, threshold))  # Clamp to valid range
+                threshold = max(0.5, min(1.0, threshold))
             except:
                 threshold = 0.7
         
@@ -215,6 +242,7 @@ if __name__ == "__main__":
         result = authenticate_user(
             json_file,
             model_path="keystroke_auth_model.pkl",
+            scaler_path="scaler.pkl",
             use_multi_phrase=use_multi_phrase,
             threshold=threshold
         )
@@ -224,7 +252,11 @@ if __name__ == "__main__":
         files_input = input("\nEnter JSON file paths (comma-separated): ").strip()
         json_files = [f.strip() for f in files_input.split(',')]
         
-        results = batch_authenticate(json_files, model_path="keystroke_auth_model.pkl")
+        results = batch_authenticate(
+            json_files,
+            model_path="keystroke_auth_model.pkl",
+            scaler_path="scaler.pkl"
+        )
         
         # Show detailed results
         print("\n" + "="*70)
@@ -237,25 +269,39 @@ if __name__ == "__main__":
                 print(f"   Match ratio: {result.get('genuine_ratio', 0)*100:.1f}%")
     
     elif choice == "3":
-        # Example/test mode
+        # Example usage
         print("\n" + "="*70)
-        print("TEST MODE")
+        print("USAGE EXAMPLE")
         print("="*70)
-        print("\nThis mode requires a test JSON file.")
-        print("Example usage:")
         print("""
-# Authenticate a user with their typing sample
+# Simple authentication
+from authenticate import authenticate_user
+
 result = authenticate_user(
-    json_file_path="user_typing.json",
+    json_file_path="new_user.json",
     model_path="keystroke_auth_model.pkl",
+    scaler_path="scaler.pkl",
     use_multi_phrase=True,
     threshold=0.7
 )
 
 if result['authenticated']:
-    print("User is genuine!")
+    print("✅ User is genuine - Access granted")
+    print(f"Confidence: {result['genuine_ratio']*100:.1f}%")
 else:
-    print("User is an impostor!")
+    print("❌ User is impostor - Access denied")
+
+# Batch authentication
+from authenticate import batch_authenticate
+
+results = batch_authenticate(
+    json_files=["user1.json", "user2.json", "user3.json"],
+    model_path="keystroke_auth_model.pkl",
+    scaler_path="scaler.pkl"
+)
+
+for r in results:
+    print(f"{r['file']}: {'GENUINE' if r['authenticated'] else 'IMPOSTOR'}")
         """)
     
     else:

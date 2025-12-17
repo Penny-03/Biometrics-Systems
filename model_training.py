@@ -34,7 +34,7 @@ class KeystrokeAuthenticator:
         self.feature_columns = [col for col in features_df.columns 
                                if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         
-    def train_one_class_svm(self, nu=0.1, kernel='rbf', gamma='auto'):
+    def train_one_class_svm(self, nu=0.1, kernel='rbf', gamma='scale'):
         """
         Train One-Class SVM model (best for single-user authentication)
         """
@@ -246,7 +246,7 @@ class KeystrokeAuthenticator:
             model_data['template'] = self.template
             model_data['template_std'] = self.template_std
             model_data['metric'] = self.metric
-        
+            
         with open(filename, 'wb') as f:
             pickle.dump(model_data, f)
         
@@ -265,5 +265,13 @@ class KeystrokeAuthenticator:
             self.template = model_data['template']
             self.template_std = model_data['template_std']
             self.metric = model_data['metric']
+            self.scaler = model_data.get('scaler', None)
+
         
         print(f"\n✓ Model loaded from: {filename}")
+    
+    def decision_score(self, new_features):
+        if self.model_type == 'OneClassSVM':
+            return self.model.decision_function([new_features])[0]
+        elif self.model_type == 'IsolationForest':
+            return self.model.decision_function([new_features])[0]
