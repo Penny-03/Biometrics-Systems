@@ -111,17 +111,7 @@ class KeystrokeAuthenticator:
                 threshold = np.mean(self.template_std) * 3
             
             return distance < threshold
-    
-    def authenticate_multi_phrase(self, features_list, threshold=0.5):
-        """Authenticate using multiple phrases (majority voting)"""
-        if len(features_list) == 0:
-            return False
-        
-        genuine_count = sum(1 for features in features_list if self.authenticate(features))
-        genuine_ratio = genuine_count / len(features_list)
-        
-        return genuine_ratio >= threshold
-    
+
     def evaluate_with_impostors(self, impostor_features_df):
         """
         Evaluate model with impostor data
@@ -242,15 +232,7 @@ class KeystrokeAuthenticator:
 
         # Return the scaler if it exists
         return model_data.get('scaler')
-        
-        if self.model_type == 'DistanceBased':
-            self.template = model_data['template']
-            self.template_std = model_data['template_std']
-            self.metric = model_data['metric']
-            self.scaler = model_data.get('scaler', None)
-
-        
-        print(f"\n✓ Model loaded from: {filename}")
+      
     
     def decision_score(self, new_features):
         if self.model_type == 'OneClassSVM':

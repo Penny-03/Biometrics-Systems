@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Keystroke Verification</title>
+    <style>
+        /* [Keeping your exact requested styles for the "Laptop" look] */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .laptop { width: 100%; max-width: 1000px; background: #1a1a1a; border-radius: 20px 20px 0 0; box-shadow: 0 20px 60px rgba(0,0,0,0.5); position: relative; padding: 20px; }
+        .laptop::before { content: ''; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 60px; height: 4px; background: #333; border-radius: 2px; }
+        .laptop::after { content: ''; position: absolute; bottom: -30px; left: -20px; right: -20px; height: 30px; background: #0a0a0a; border-radius: 0 0 30px 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .screen { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 10px; padding: 40px; min-height: 600px; position: relative; overflow: hidden; color: white; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 32px; font-weight: 700; margin-bottom: 10px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        
+        /* Content Containers */
+        .card { background: white; border-radius: 12px; padding: 30px; color: #333; box-shadow: 0 10px 30px rgba(0,0,0,0.2); animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .hidden { display: none !important; }
+        
+        /* Form Elements */
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #4b5563; }
+        select, textarea { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px; transition: 0.3s; }
+        select:focus, textarea:focus { border-color: #667eea; outline: none; }
+        textarea { font-family: 'Courier New', monospace; resize: vertical; min-height: 100px; }
+        
+        /* Button Styles */
+        .btn { width: 100%; padding: 14px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 16px; margin-top: 10px; }
+        .btn:hover { background: #4338ca; }
+        .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+        .btn-secondary { background: #6b7280; }
+        .btn-secondary:hover { background: #4b5563; }
+        
+        /* Typing Area */
+        .prompt-box { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-weight: bold; text-align: center; }
+        
+        /* Results */
+        .result-box { margin-top: 20px; padding: 20px; border-radius: 8px; text-align: center; }
+        .result-success { background: #d1fae5; color: #065f46; border: 1px solid #34d399; }
+        .result-error { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+        .result-icon { font-size: 48px; display: block; margin-bottom: 10px; }
+        
+        /* Loading Spinner */
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite; margin-right: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="laptop">
+        <div class="screen">
+            <div class="header">
+                <h1>🔐 Real-Time Biometric Verification</h1>
+                <p>Connected to Local Model Server</p>
+            </div>
+
+            <div id="view-select" class="card">
+                <h2 style="margin-bottom: 20px; text-align: center;">Select Identity</h2>
+                <div style="margin-bottom: 20px;">
+                    <label>Who are you claiming to be?</label>
+                    <select id="userSelect">
+                        <option value="">Loading users from server...</option>
+                    </select>
+                </div>
+                <div style="background: #eff6ff; padding: 15px; border-radius: 8px; font-size: 14px; color: #1e40af; margin-bottom: 20px;">
+                    <strong>ℹ️ Server Status:</strong> <span id="serverStatus">Connecting...</span>
+                </div>
+                <button class="btn" id="btnGoVerify" onclick="goToVerify()" disabled>Next: Verify Identity</button>
+            </div>
+
+            <div id="view-verify" class="card hidden">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3>Verifying: <span id="displayUser" style="color: #4f46e5;">...</span></h3>
+                    <button onclick="resetViews()" style="background:none; border:none; color: #666; cursor:pointer; text-decoration: underline;">Change User</button>
+                </div>
+
+                <div class="prompt-box">
+                    the quick brown fox jumps over the lazy dog
+                </div>
+
+                <textarea id="typingArea" placeholder="Type the phrase above exactly..." rows="3"></textarea>
+
+                <div id="resultContainer" class="hidden"></div>
+
+                <button class="btn" id="btnVerify" onclick="submitVerification()">Verify Identity</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIG
+        const API_URL = "http://127.0.0.1:5000/api";
+        const TARGET_PHRASE = "the quick brown fox jumps over the lazy dog";
+        
+        // STATE
+        let keyPressTime = {};
+        let currentKeystrokes = [];
+        let selectedUser = "";
+
+        // 1. INITIALIZE: Fetch users from Python backend
+        async function loadUsers() {
+            const select = document.getElementById('userSelect');
+            const status = document.getElementById('serverStatus');
+            const btn = document.getElementById('btnGoVerify');
+
+            try {
+                const response = await fetch(`${API_URL}/users`);
+                const data = await response.json();
+                
+                select.innerHTML = '<option value="">-- Select a User --</option>';
+                data.users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user;
+                    option.textContent = user; // Uses filename as user ID
+                    select.appendChild(option);
+                });
+
+                status.textContent = "Connected to 'models/' folder.";
+                status.style.color = "green";
+                
+                select.addEventListener('change', () => {
+                    btn.disabled = !select.value;
+                });
+
+            } catch (error) {
+                status.textContent = "Error connecting to server. Is server.py running?";
+                status.style.color = "red";
+                console.error("Fetch error:", error);
+            }
+        }
+
+        // 2. KEYSTROKE CAPTURE LOGIC
+        const setupKeystrokeListeners = () => {
+            const textarea = document.getElementById('typingArea');
+            
+            textarea.addEventListener('keydown', (e) => {
+                const key = e.key;
+                if (key === 'Enter') return;
+                // Reset on backspace
+                if (key === 'Backspace') {
+                    currentKeystrokes = [];
+                    textarea.value = '';
+                    return;
+                }
+                if (!keyPressTime[e.code]) {
+                    keyPressTime[e.code] = Date.now();
+                }
+            });
+
+            textarea.addEventListener('keyup', (e) => {
+                const key = e.key;
+                if (key === 'Enter' || key === 'Backspace') return;
+
+                const releaseTime = Date.now();
+                const pressTime = keyPressTime[e.code];
+
+                if (pressTime) {
+                    const dwellTime = releaseTime - pressTime;
+                    const prevKeystroke = currentKeystrokes[currentKeystrokes.length - 1];
+                    const flightTime = prevKeystroke ? pressTime - prevKeystroke.releaseTime : 0;
+
+                    currentKeystrokes.push({
+                        key: key,
+                        pressTime: pressTime,
+                        releaseTime: releaseTime,
+                        dwellTime: dwellTime,
+                        flightTime: flightTime
+                    });
+                    
+                    delete keyPressTime[e.code];
+                }
+            });
+        };
+
+        // 3. SUBMIT TO PYTHON SERVER
+        async function submitVerification() {
+            const textarea = document.getElementById('typingArea');
+            const resultBox = document.getElementById('resultContainer');
+            const btn = document.getElementById('btnVerify');
+
+            // Client-side validation
+            if (textarea.value.trim().toLowerCase() !== TARGET_PHRASE) {
+                alert("Please type the phrase exactly as shown.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> Verifying...';
+
+            try {
+                const response = await fetch(`${API_URL}/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        claimedUser: selectedUser,
+                        keystrokes: currentKeystrokes
+                    })
+                });
+
+                const result = await response.json();
+                
+                resultBox.classList.remove('hidden');
+                if (result.authenticated) {
+                    resultBox.innerHTML = `
+                        <div class="result-box result-success">
+                            <span class="result-icon">✅</span>
+                            <h3>Access Granted</h3>
+                            <p>Identity Verified: <strong>${result.user}</strong></p>
+                            <p>Confidence: ${result.confidence}%</p>
+                        </div>`;
+                } else {
+                    resultBox.innerHTML = `
+                        <div class="result-box result-error">
+                            <span class="result-icon">❌</span>
+                            <h3>Access Denied</h3>
+                            <p>Typing pattern does not match <strong>${result.user}</strong>.</p>
+                        </div>`;
+                }
+
+            } catch (error) {
+                alert("Server error: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Verify Identity';
+            }
+        }
+
+        // VIEW MANAGEMENT
+        function goToVerify() {
+            const select = document.getElementById('userSelect');
+            selectedUser = select.value;
+            if (!selectedUser) return;
+
+            document.getElementById('displayUser').textContent = selectedUser;
+            document.getElementById('view-select').classList.add('hidden');
+            document.getElementById('view-verify').classList.remove('hidden');
+            
+            // Reset typing data
+            currentKeystrokes = [];
+            document.getElementById('typingArea').value = '';
+            document.getElementById('resultContainer').classList.add('hidden');
+        }
+
+        function resetViews() {
+            document.getElementById('view-verify').classList.add('hidden');
+            document.getElementById('view-select').classList.remove('hidden');
+            currentKeystrokes = [];
+        }
+
+        // INIT
+        loadUsers();
+        setupKeystrokeListeners();
+
+    </script>
+</body>
+</html>

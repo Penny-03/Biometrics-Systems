@@ -346,40 +346,6 @@
             URL.revokeObjectURL(url);
           };
 
-          const downloadCSV = () => {
-            if (sessionData.length === 0) {
-              alert('No data to download. Please record at least one session.');
-              return;
-            }
-
-            const headers = ['sessionId', 'userId', 'phraseNumber', 'key', 'pressTime', 'releaseTime', 'dwellTime', 'flightTime', 'timestamp'];
-            const rows = sessionData.flatMap(session => 
-              session.data.map(ks => [
-                ks.sessionId,
-                ks.userId,
-                ks.phraseNumber,
-                ks.key,
-                ks.pressTime,
-                ks.releaseTime,
-                ks.dwellTime,
-                ks.flightTime,
-                ks.timestamp
-              ])
-            );
-
-            const csv = [
-              headers.join(','),
-              ...rows.map(row => row.join(','))
-            ].join('\n');
-
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `keystroke_data_${userId}_${Date.now()}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          };
 
           useEffect(() => {
             if (isRecording) {
@@ -419,7 +385,7 @@
                           <li>Press ENTER after each phrase to submit it</li>
                           <li>Complete at least {minPhrases} correct phrases</li>
                           <li>Click "Stop Recording" when you've completed enough phrases</li>
-                          <li>Download data as JSON or CSV format</li>
+                          <li>Download data as JSON format</li>
                         </ol>
                         <button className="btn-link" onClick={() => setShowInstructions(false)}>
                           Hide instructions
@@ -536,14 +502,6 @@
                     >
                       <Download />
                       Download JSON
-                    </button>
-                    <button
-                      onClick={downloadCSV}
-                      disabled={sessionData.length === 0}
-                      className="btn btn-indigo"
-                    >
-                      <Download />
-                      Download CSV
                     </button>
                   </div>
                 </div>
