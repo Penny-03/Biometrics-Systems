@@ -112,5 +112,5 @@ def verify_user():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"🚀 Verification Server active. Serving models from: {MODELS_DIR.absolute()}")
+    print(f"Verification Server active. Serving models from: {MODELS_DIR.absolute()}")
     app.run(debug=True, port=5000)
