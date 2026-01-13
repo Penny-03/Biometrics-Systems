@@ -89,28 +89,6 @@ class KeystrokeAuthenticator:
         
         return self.model
     
-    def train_distance_based(self, metric='euclidean'):
-        """Train simple distance-based authentication"""
-        print("\n" + "="*60)
-        print("TRAINING DISTANCE-BASED MODEL")
-        print("="*60)
-        
-        X_df = self.features_df[self.feature_columns].fillna(0)
-        X = X_df.values
-        
-        # Create user template (mean of all training samples)
-        self.template = np.mean(X, axis=0)
-        self.template_std = np.std(X, axis=0)
-        self.metric = metric
-        self.model_type = 'DistanceBased'
-        
-        print(f"\n✓ Template created successfully")
-        print(f"✓ Training phrases: {len(X)}")
-        print(f"✓ Features in template: {len(self.template)}")
-        print(f"✓ Distance metric: {metric}")
-        
-        return self.template
-    
     def authenticate(self, new_features, threshold=None):
         """Authenticate a new typing sample"""
         # Ensure input handles NaNs

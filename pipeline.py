@@ -141,7 +141,7 @@ def main():
         print(f"\nAVERAGE EER: {results_df['EER'].mean()*100:.2f}%")
         
         best = results_df.loc[results_df['EER'].idxmin()]
-        print(f"🏆 Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
+        print(f" Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
 
 if __name__ == "__main__":
     main()
