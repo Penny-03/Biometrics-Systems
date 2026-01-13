@@ -234,12 +234,13 @@ class KeystrokeAuthenticator:
         print("\n✓ Confusion matrix saved as 'confusion_matrix.png'")
         # plt.show() 
     
-    def save_model(self, filename):
+    def save_model(self, filename, scaler=None):
         """Save trained model to file"""
         model_data = {
             'model': self.model,
             'model_type': self.model_type,
-            'feature_columns': self.feature_columns
+            'feature_columns': self.feature_columns,
+            'scaler': scaler
         }
         
         if self.model_type == 'DistanceBased':
@@ -260,6 +261,9 @@ class KeystrokeAuthenticator:
         self.model = model_data['model']
         self.model_type = model_data['model_type']
         self.feature_columns = model_data['feature_columns']
+
+        # Return the scaler if it exists
+        return model_data.get('scaler')
         
         if self.model_type == 'DistanceBased':
             self.template = model_data['template']

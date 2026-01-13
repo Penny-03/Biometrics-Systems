@@ -86,10 +86,10 @@ def main():
             authenticator.train_isolation_forest(contamination=0.15, n_estimators=300)
         else:
             # Default for good users (Iga, Chiara)
-            authenticator.train_isolation_forest(contamination=0.04, n_estimators=200)
+            authenticator.train_isolation_forest(contamination=0.01, n_estimators=200)
             
         model_filename = MODELS_DIR / f"model_{user_name}.pkl"
-        authenticator.save_model(str(model_filename))
+        authenticator.save_model(str(model_filename), scaler=trained_scaler)
         
         # --- 4. EVALUATE (Attack) ---
         print(f"-> Evaluating against attacks...")
