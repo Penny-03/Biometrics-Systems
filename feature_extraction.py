@@ -1,66 +1,52 @@
 """
 Keystroke Dynamics - Feature Extraction and Preprocessing
-This script processes the collected keystroke data and extracts features for authentication
-Updated to handle multiple phrases per session with phraseNumber
+Updated with enhanced features and proper train/test handling
 """
 
 import json
 import pandas as pd
 import numpy as np
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
 class KeystrokeFeatureExtractor:
-    """Extract features from keystroke timing data"""
-    
     def __init__(self, json_file_path):
-        """
-        Initialize with path to the collected JSON data
-        
-        Args:
-            json_file_path: Path to the JSON file from the data collector
-        """
         self.json_file_path = json_file_path
         self.raw_data = None
         self.features_df = None
         
     def load_data(self):
-        """Load the JSON data file"""
         with open(self.json_file_path, 'r') as f:
             self.raw_data = json.load(f)
         print(f"✓ Loaded data for user: {self.raw_data['metadata']['userId']}")
         print(f"✓ Total sessions: {self.raw_data['metadata']['totalSessions']}")
         return self.raw_data
-    
+
     def extract_phrase_features(self, phrase_keystrokes):
-        """
-        Extract features from a single phrase
-        
-        Args:
-            phrase_keystrokes: List of keystroke data for one phrase
-            
-        Returns:
-            Dictionary of extracted features
-        """
-        if len(phrase_keystrokes) == 0:
+        """Extract enhanced features from a single phrase"""
+        if len(phrase_keystrokes) < 2:
             return None
-        
-        # Extract timing arrays
+
         dwell_times = [ks['dwellTime'] for ks in phrase_keystrokes]
         flight_times = [ks['flightTime'] for ks in phrase_keystrokes if ks['flightTime'] > 0]
-        
+
+        # UP-DOWN latencies (release -> next press)
+        ud_latencies = []
+        for i in range(len(phrase_keystrokes) - 1):
+            ud = phrase_keystrokes[i + 1]['pressTime'] - phrase_keystrokes[i]['releaseTime']
+            if ud >= 0:
+                ud_latencies.append(ud)
+
         features = {}
-        
+
         # Dwell time statistics
         features['dwell_mean'] = np.mean(dwell_times)
         features['dwell_std'] = np.std(dwell_times)
         features['dwell_median'] = np.median(dwell_times)
         features['dwell_min'] = np.min(dwell_times)
         features['dwell_max'] = np.max(dwell_times)
-        features['dwell_q25'] = np.percentile(dwell_times, 25)
-        features['dwell_q75'] = np.percentile(dwell_times, 75)
-        
+        features['dwell_cv'] = features['dwell_std'] / (features['dwell_mean'] + 1e-6)
+
         # Flight time statistics
         if len(flight_times) > 0:
             features['flight_mean'] = np.mean(flight_times)
@@ -68,40 +54,62 @@ class KeystrokeFeatureExtractor:
             features['flight_median'] = np.median(flight_times)
             features['flight_min'] = np.min(flight_times)
             features['flight_max'] = np.max(flight_times)
-            features['flight_q25'] = np.percentile(flight_times, 25)
-            features['flight_q75'] = np.percentile(flight_times, 75)
+            features['flight_cv'] = features['flight_std'] / (features['flight_mean'] + 1e-6)
         else:
             features['flight_mean'] = 0
             features['flight_std'] = 0
             features['flight_median'] = 0
             features['flight_min'] = 0
             features['flight_max'] = 0
-            features['flight_q25'] = 0
-            features['flight_q75'] = 0
-        
-        # Typing speed (characters per second)
+            features['flight_cv'] = 0
+
+        # UP-DOWN latency statistics
+        if len(ud_latencies) > 0:
+            features['ud_mean'] = np.mean(ud_latencies)
+            features['ud_std'] = np.std(ud_latencies)
+            features['ud_median'] = np.median(ud_latencies)
+        else:
+            features['ud_mean'] = 0
+            features['ud_std'] = 0
+            features['ud_median'] = 0
+
+        # Typing speed features
         total_time = phrase_keystrokes[-1]['releaseTime'] - phrase_keystrokes[0]['pressTime']
-        features['typing_speed'] = (len(phrase_keystrokes) / total_time) * 1000  # Convert to chars/sec
-        
-        # Total keystrokes in phrase
+        cps = (len(phrase_keystrokes) / total_time) * 1000 if total_time > 0 else 0
+
+        features['typing_speed'] = cps
         features['total_keystrokes'] = len(phrase_keystrokes)
-        
-        # Ratio features
+        features['speed_per_key_std'] = np.std(dwell_times) / (cps + 1e-6)
+
+        # Ratios
         features['dwell_flight_ratio'] = features['dwell_mean'] / (features['flight_mean'] + 1)
-        
+
         return features
-    
+
+    def extract_digraph_features(self, phrase_keystrokes, top_n=10):
+        """Extract digraph timing features"""
+        digraph_times = {}
+
+        for i in range(len(phrase_keystrokes) - 1):
+            key1 = phrase_keystrokes[i]['key'].replace(" ", "SPC").replace("[", "").replace("]", "")
+            key2 = phrase_keystrokes[i + 1]['key'].replace(" ", "SPC").replace("[", "").replace("]", "")
+            digraph = f"{key1}_{key2}"
+
+            timing = phrase_keystrokes[i + 1]['pressTime'] - phrase_keystrokes[i]['pressTime']
+            if timing >= 0:
+                digraph_times.setdefault(digraph, []).append(timing)
+
+        digraph_features = {}
+        sorted_digraphs = sorted(digraph_times.items(), key=lambda x: len(x[1]), reverse=True)
+
+        for digraph, times in sorted_digraphs[:top_n]:
+            digraph_features[f"dig_{digraph}_mean"] = np.mean(times)
+            digraph_features[f"dig_{digraph}_std"] = np.std(times)
+
+        return digraph_features
+
     def extract_basic_features(self, session_data):
-        """
-        Extract basic timing features from a single session
-        Now handles multiple phrases per session
-        
-        Args:
-            session_data: Dictionary containing keystroke data for one session
-            
-        Returns:
-            List of feature dictionaries (one per phrase)
-        """
+        """Extract features from all phrases in a session"""
         keystrokes = session_data['data']
         
         if len(keystrokes) == 0:
@@ -110,7 +118,7 @@ class KeystrokeFeatureExtractor:
         # Group keystrokes by phraseNumber
         phrases = {}
         for ks in keystrokes:
-            phrase_num = ks.get('phraseNumber', 1)  # Default to 1 if not present
+            phrase_num = ks.get('phraseNumber', 1)
             if phrase_num not in phrases:
                 phrases[phrase_num] = []
             phrases[phrase_num].append(ks)
@@ -119,9 +127,15 @@ class KeystrokeFeatureExtractor:
         all_phrase_features = []
         for phrase_num in sorted(phrases.keys()):
             phrase_keystrokes = phrases[phrase_num]
+            
+            # Basic features
             phrase_features = self.extract_phrase_features(phrase_keystrokes)
             
             if phrase_features is not None:
+                # Digraph features (optional - can be disabled for speed)
+                digraph_features = self.extract_digraph_features(phrase_keystrokes, top_n=10)
+                phrase_features.update(digraph_features)
+                
                 # Add metadata
                 phrase_features['session_id'] = session_data['sessionId']
                 phrase_features['phrase_number'] = phrase_num
@@ -132,57 +146,18 @@ class KeystrokeFeatureExtractor:
         
         return all_phrase_features
     
-    def extract_digraph_features(self, phrase_keystrokes, top_n=10):
-        """
-        Extract features from specific key pair (digraph) timings
-        
-        Args:
-            phrase_keystrokes: List of keystroke data for one phrase
-            top_n: Number of most common digraphs to extract
-            
-        Returns:
-            Dictionary of digraph features
-        """
-        digraph_times = {}
-        
-        # Calculate digraph timings
-        for i in range(len(phrase_keystrokes) - 1):
-            key1 = phrase_keystrokes[i]['key']
-            key2 = phrase_keystrokes[i + 1]['key']
-            digraph = f"{key1}-{key2}"
-            
-            # Time between pressing key1 and pressing key2
-            timing = phrase_keystrokes[i + 1]['pressTime'] - phrase_keystrokes[i]['pressTime']
-            
-            if digraph not in digraph_times:
-                digraph_times[digraph] = []
-            digraph_times[digraph].append(timing)
-        
-        # Get statistics for most common digraphs
-        digraph_features = {}
-        sorted_digraphs = sorted(digraph_times.items(), key=lambda x: len(x[1]), reverse=True)
-        
-        for i, (digraph, times) in enumerate(sorted_digraphs[:top_n]):
-            prefix = f"digraph_{i}"
-            digraph_features[f"{prefix}_mean"] = np.mean(times)
-            digraph_features[f"{prefix}_std"] = np.std(times)
-            digraph_features[f"{prefix}_name"] = digraph
-        
-        return digraph_features
-    
     def extract_all_features(self):
-        """Extract features from all sessions and phrases"""
+        """Extract features from all sessions"""
         if self.raw_data is None:
             self.load_data()
         
         all_features = []
-        
         for session in self.raw_data['sessions']:
-            # Extract features for each phrase in the session
             phrase_features_list = self.extract_basic_features(session)
             all_features.extend(phrase_features_list)
         
         self.features_df = pd.DataFrame(all_features)
+        self.features_df.fillna(0, inplace=True)
         
         total_phrases = len(self.features_df)
         total_sessions = len(self.raw_data['sessions'])
@@ -190,7 +165,7 @@ class KeystrokeFeatureExtractor:
         
         print(f"\n✓ Extracted features from {total_phrases} phrases across {total_sessions} sessions")
         print(f"✓ Average phrases per session: {avg_phrases:.1f}")
-        print(f"✓ Features per phrase: {len(self.features_df.columns) - 4}")  # Excluding metadata
+        print(f"✓ Features per phrase: {len(self.features_df.columns) - 4}")
         
         return self.features_df
     
@@ -198,7 +173,6 @@ class KeystrokeFeatureExtractor:
         """Save extracted features to CSV"""
         if self.features_df is None:
             self.extract_all_features()
-        
         self.features_df.to_csv(output_path, index=False)
         print(f"\n✓ Features saved to: {output_path}")
     
@@ -207,38 +181,23 @@ class KeystrokeFeatureExtractor:
         if self.features_df is None:
             self.extract_all_features()
         
-        print("\n" + "="*60)
-        print("FEATURE EXTRACTION SUMMARY")
-        print("="*60)
-        
-        # Exclude metadata columns
         feature_cols = [col for col in self.features_df.columns 
                        if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         
+        print("\n" + "="*60)
+        print("FEATURE EXTRACTION SUMMARY")
+        print("="*60)
         print(f"\nUser ID: {self.features_df['user_id'].iloc[0]}")
         print(f"Number of phrases: {len(self.features_df)}")
-        print(f"Number of sessions: {self.features_df['session_id'].nunique()}")
-        print(f"Number of features per phrase: {len(feature_cols)}")
-        
-        print("\nKey Feature Statistics:")
-        print("-" * 60)
-        for col in ['dwell_mean', 'flight_mean', 'typing_speed']:
-            if col in self.features_df.columns:
-                print(f"{col:20s}: {self.features_df[col].mean():.2f} ± {self.features_df[col].std():.2f}")
+        print(f"Number of features: {len(feature_cols)}")
         
         return self.features_df[feature_cols].describe()
 
 
 class KeystrokePreprocessor:
-    """Preprocess features for model training"""
+    """Preprocess features with proper train/test handling"""
     
     def __init__(self, features_df):
-        """
-        Initialize with features dataframe
-        
-        Args:
-            features_df: DataFrame with extracted features
-        """
         self.features_df = features_df.copy()
         self.feature_columns = None
         self.scaler = None
@@ -249,13 +208,31 @@ class KeystrokePreprocessor:
                                if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         return self.feature_columns
     
-    def handle_outliers(self, method='iqr', threshold=1.5):
+    def align_columns(self, reference_columns):
+        """
+        Force columns to match reference exactly (CRITICAL for test data)
+        
+        Args:
+            reference_columns: List of column names from training data
+        """
+        # Add missing columns with 0
+        for col in reference_columns:
+            if col not in self.features_df.columns:
+                self.features_df[col] = 0.0
+        
+        # Keep only reference columns and enforce order
+        self.features_df = self.features_df[reference_columns]
+        self.feature_columns = reference_columns
+        
+        return self.features_df
+    
+    def handle_outliers(self, method='iqr', threshold=3.0):
         """
         Remove outliers from features
         
         Args:
             method: 'iqr' or 'zscore'
-            threshold: IQR multiplier or Z-score threshold
+            threshold: IQR multiplier (higher = more lenient)
         """
         if self.feature_columns is None:
             self.identify_feature_columns()
@@ -263,36 +240,37 @@ class KeystrokePreprocessor:
         original_count = len(self.features_df)
         
         if method == 'iqr':
-            # IQR method
-            for col in self.feature_columns:
+            # Only apply to basic features (not digraphs which are sparse)
+            basic_cols = [c for c in self.feature_columns if 'dig_' not in c]
+            mask = pd.Series(True, index=self.features_df.index)
+            
+            for col in basic_cols:
                 Q1 = self.features_df[col].quantile(0.25)
                 Q3 = self.features_df[col].quantile(0.75)
                 IQR = Q3 - Q1
                 lower_bound = Q1 - threshold * IQR
                 upper_bound = Q3 + threshold * IQR
-                self.features_df = self.features_df[
-                    (self.features_df[col] >= lower_bound) & 
-                    (self.features_df[col] <= upper_bound)
-                ]
-        
-        elif method == 'zscore':
-            # Z-score method
-            from scipy import stats
-            z_scores = np.abs(stats.zscore(self.features_df[self.feature_columns]))
-            self.features_df = self.features_df[(z_scores < threshold).all(axis=1)]
+                col_mask = (self.features_df[col] >= lower_bound) & (self.features_df[col] <= upper_bound)
+                mask = mask & col_mask
+            
+            self.features_df = self.features_df[mask]
         
         removed = original_count - len(self.features_df)
-        print(f"\n✓ Removed {removed} outlier phrases")
+        print(f"\n✓ Removed {removed} outlier phrases (Threshold: {threshold})")
         print(f"✓ Remaining phrases: {len(self.features_df)}")
         
         return self.features_df
     
-    def normalize_features(self, method='standard'):
+    def fit_transform_scaler(self, method='standard'):
         """
-        Normalize feature values
+        Fit scaler on training data and transform
+        Use this ONLY for training data!
         
         Args:
             method: 'standard' (z-score) or 'minmax'
+            
+        Returns:
+            Tuple of (transformed_df, fitted_scaler)
         """
         from sklearn.preprocessing import StandardScaler, MinMaxScaler
         
@@ -308,52 +286,44 @@ class KeystrokePreprocessor:
             self.features_df[self.feature_columns]
         )
         
-        print(f"\n✓ Features normalized using {method} scaling")
+        print(f"\n✓ Scaler Fitted & Features Normalized ({method})")
         
-        return self.features_df
-    
-    def split_data(self, test_size=0.3, random_state=42):
+        return self.features_df, self.scaler
+
+    def transform_with_scaler(self, scaler):
         """
-        Split data into training and testing sets
+        Apply existing scaler to new data (DO NOT RE-FIT)
+        Use this for test/authentication data!
         
         Args:
-            test_size: Proportion of data for testing
-            random_state: Random seed for reproducibility
+            scaler: Fitted scaler from training data
             
         Returns:
-            X_train, X_test, y_train, y_test
+            Transformed dataframe
         """
-        from sklearn.model_selection import train_test_split
-        
         if self.feature_columns is None:
             self.identify_feature_columns()
         
-        X = self.features_df[self.feature_columns]
-        y = self.features_df['user_id']
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
+        self.features_df[self.feature_columns] = scaler.transform(
+            self.features_df[self.feature_columns]
         )
         
-        print(f"\n✓ Data split: {len(X_train)} training, {len(X_test)} testing phrases")
+        print(f"\n✓ Features transformed with existing scaler")
         
-        return X_train, X_test, y_train, y_test
+        return self.features_df
 
 
 # Example usage
 if __name__ == "__main__":
-    # Path to your collected JSON file
-    json_file = "keystroke_data_user001_1234567890.json"
-    
     print("KEYSTROKE DYNAMICS - FEATURE EXTRACTION")
     print("=" * 60)
     
-    # Step 1: Extract features
-    extractor = KeystrokeFeatureExtractor(json_file)
+    # Extract features
+    extractor = KeystrokeFeatureExtractor("keystroke_data.json")
     extractor.load_data()
     features_df = extractor.extract_all_features()
     
-    # Show feature summary
+    # Show summary
     summary = extractor.get_feature_summary()
     print("\nFeature Statistics:")
     print(summary)
@@ -361,7 +331,7 @@ if __name__ == "__main__":
     # Save features
     extractor.save_features("keystroke_features.csv")
     
-    # Step 2: Preprocess features
+    # Preprocess
     print("\n" + "=" * 60)
     print("PREPROCESSING")
     print("=" * 60)
@@ -370,13 +340,9 @@ if __name__ == "__main__":
     preprocessor.identify_feature_columns()
     
     # Remove outliers
-    preprocessor.handle_outliers(method='iqr', threshold=1.5)
+    preprocessor.handle_outliers(method='iqr', threshold=3.0)
     
-    # Normalize features
-    preprocessor.normalize_features(method='standard')
-    
-    # Split data (if you have multiple users)
-    # X_train, X_test, y_train, y_test = preprocessor.split_data(test_size=0.3)
+    # Fit scaler and transform
+    processed_features, scaler = preprocessor.fit_transform_scaler(method='standard')
     
     print("\n✓ Feature extraction and preprocessing complete!")
-    print(f"✓ Processed features saved and ready for model training")

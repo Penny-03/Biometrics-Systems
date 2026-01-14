@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keystroke Biometrics - Live Verification Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        /* Laptop Container */
+        .laptop {
+            width: 100%;
+            max-width: 1200px;
+            background: #1a1a1a;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            position: relative;
+            padding: 20px;
+        }
+        
+        .laptop::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+        }
+        
+        .laptop::after {
+            content: '';
+            position: absolute;
+            bottom: -30px;
+            left: -20px;
+            right: -20px;
+            height: 30px;
+            background: #0a0a0a;
+            border-radius: 0 0 30px 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        /* Screen */
+        .screen {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 10px;
+            padding: 40px;
+            min-height: 600px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .screen::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header h1 {
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        
+        /* Content Area */
+        .content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* User Selection */
+        .user-selection {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .input-group select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .input-group select:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        
+        /* Verification Area */
+        .verification-area {
+            display: none;
+        }
+        
+        .verification-area.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .typing-section {
+            background: #f8f9fa;
+            border: 3px solid #667eea;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        
+        .prompt-box {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .prompt-label {
+            font-weight: 600;
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .prompt-text {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #856404;
+            font-size: 20px;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 18px;
+            border: 3px solid #667eea;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 120px;
+            transition: all 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        
+        textarea.success {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        
+        textarea.error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        
+        .progress-container {
+            margin: 25px 0;
+        }
+        
+        .progress-bar {
+            background: #e0e0e0;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+        }
+        
+        .progress-text {
+            text-align: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .progress-text .ready {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        /* Stats Display */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 25px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 13px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 16px 35px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+        
+        /* Results */
+        .result-box {
+            padding: 40px;
+            border-radius: 15px;
+            margin-top: 30px;
+            text-align: center;
+            animation: slideIn 0.5s;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .result-box.success {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 3px solid #28a745;
+        }
+        
+        .result-box.danger {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 3px solid #dc3545;
+        }
+        
+        .result-icon {
+            font-size: 100px;
+            margin-bottom: 20px;
+            animation: bounce 0.6s;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-20px); }
+            60% { transform: translateY(-10px); }
+        }
+        
+        .result-title {
+            font-size: 38px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        .result-subtitle {
+            font-size: 20px;
+            margin-bottom: 25px;
+            opacity: 0.9;
+        }
+        
+        .result-details {
+            background: rgba(255,255,255,0.8);
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 25px;
+            text-align: left;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            font-size: 16px;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .detail-value {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .message-box {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 18px;
+            margin: 25px 0;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        
+        .message-box strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .user-info {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .user-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="laptop">
+        <div class="screen">
+            <div class="header">
+                <h1>🔐 Keystroke Biometrics Verification</h1>
+                <p>Live Authentication Demo</p>
+            </div>
+            
+            <div class="content">
+                <!-- User Selection -->
+                <div id="userSelection">
+                    <div class="user-selection">
+                        <h2 style="margin-bottom: 20px; color: #333; text-align: center;">Select User to Verify</h2>
+                        
+                        <div class="input-group">
+                            <label>👤 User Identity to Verify</label>
+                            <select id="userSelect" onchange="selectUser()">
+                                <option value="">-- Select a user --</option>
+                                <option value="alice">Alice Johnson</option>
+                                <option value="bob">Bob Smith</option>
+                                <option value="charlie">Charlie Brown</option>
+                                <option value="demo">Demo User (Test)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="message-box">
+                            <strong>ℹ️ Presentation Demo Mode</strong>
+                            In a real deployment, this would connect to your trained model (keystroke_auth_model.pkl) and use the scaler (scaler.pkl) for authentication. The system compares typing patterns in real-time.
+                        </div>
+                        
+                        <div id="selectedUserInfo" class="user-info hidden">
+                            <h4 style="margin-bottom: 15px; color: #667eea;">📋 User Profile</h4>
+                            <div class="user-info-item">
+                                <span style="font-weight: 600;">User ID:</span>
+                                <span id="infoUserId">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span style="font-weight: 600;">Full Name:</span>
+                                <span id="infoFullName">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span style="font-weight: 600;">Enrolled:</span>
+                                <span id="infoEnrolled">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span style="font-weight: 600;">Training Phrases:</span>
+                                <span id="infoTrainingPhrases">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="startVerifyBtn" onclick="startVerification()" disabled>
+                            ▶ Start Verification
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Verification Screen -->
+                <div id="verificationScreen" class="verification-area">
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px;">
+                        <h3 style="color: #333; margin-bottom: 10px;">
+                            Verifying: <span id="verifyingUser" style="color: #667eea;">-</span>
+                        </h3>
+                        <button class="btn" style="background: #6c757d; color: white; padding: 10px 20px; font-size: 14px;" onclick="backToSelection()">
+                            ← Change User
+                        </button>
+                    </div>
+                    
+                    <div class="message-box">
+                        <strong>📋 Instructions:</strong>
+                        Type the phrase below exactly as shown. Press ENTER after each attempt (minimum 3 phrases required for accurate verification).
+                    </div>
+                    
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="verifyProgress" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="verifyCount">0</span> / 3 phrases completed
+                            <span id="readyIndicator" class="ready hidden"> ✓ Ready to verify!</span>
+                        </div>
+                    </div>
+                    
+                    <div class="typing-section">
+                        <div class="prompt-box">
+                            <div class="prompt-label">Type this phrase:</div>
+                            <div class="prompt-text">The quick brown fox jumps over the lazy dog</div>
+                        </div>
+                        <textarea id="verifyTextarea" placeholder="Start typing here... Press ENTER when done, BACKSPACE to restart" rows="4"></textarea>
+                        <p style="margin-top: 10px; font-size: 13px; color: #666;">
+                            💡 <strong>Tip:</strong> Press BACKSPACE to restart if you make a mistake
+                        </p>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="verifyAvgSpeed">0.0</div>
+                            <div class="stat-label">Typing Speed (CPS)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="verifyDwellTime">0</div>
+                            <div class="stat-label">Dwell Time (ms)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="verifyFlightTime">0</div>
+                            <div class="stat-label">Flight Time (ms)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button class="btn btn-success hidden" id="verifyBtn" onclick="performVerification()">
+                            ✓ Verify Identity
+                        </button>
+                    </div>
+                    
+                    <div id="verifyResult"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PHRASE = "The quick brown fox jumps over the lazy dog";
+        
+        // Simulated enrolled users (in production, this would come from your model)
+        const enrolledUsers = {
+            alice: {
+                fullName: "Alice Johnson",
+                userId: "alice",
+                enrolled: "2025-01-10",
+                trainingPhrases: 15,
+                avgSpeed: 6.2,
+                avgDwell: 95,
+                avgFlight: 142
+            },
+            bob: {
+                fullName: "Bob Smith",
+                userId: "bob",
+                enrolled: "2025-01-11",
+                trainingPhrases: 12,
+                avgSpeed: 5.8,
+                avgDwell: 105,
+                avgFlight: 156
+            },
+            charlie: {
+                fullName: "Charlie Brown",
+                userId: "charlie",
+                enrolled: "2025-01-12",
+                trainingPhrases: 18,
+                avgSpeed: 7.1,
+                avgDwell: 88,
+                avgFlight: 128
+            },
+            demo: {
+                fullName: "Demo User",
+                userId: "demo",
+                enrolled: "2025-01-13",
+                trainingPhrases: 10,
+                avgSpeed: 6.5,
+                avgDwell: 92,
+                avgFlight: 138
+            }
+        };
+        
+        let selectedUserId = null;
+        let isRecording = false;
+        let keystrokeData = [];
+        let phrasesCompleted = 0;
+        let currentPhraseKeystrokes = [];
+        let keyPressTime = {};
+        
+        // User Selection
+        function selectUser() {
+            const userId = document.getElementById('userSelect').value;
+            
+            if (userId && enrolledUsers[userId]) {
+                selectedUserId = userId;
+                const user = enrolledUsers[userId];
+                
+                // Show user info
+                document.getElementById('selectedUserInfo').classList.remove('hidden');
+                document.getElementById('infoUserId').textContent = user.userId;
+                document.getElementById('infoFullName').textContent = user.fullName;
+                document.getElementById('infoEnrolled').textContent = user.enrolled;
+                document.getElementById('infoTrainingPhrases').textContent = user.trainingPhrases;
+                
+                // Enable start button
+                document.getElementById('startVerifyBtn').disabled = false;
+            } else {
+                selectedUserId = null;
+                document.getElementById('selectedUserInfo').classList.add('hidden');
+                document.getElementById('startVerifyBtn').disabled = true;
+            }
+        }
+        
+        function startVerification() {
+            if (!selectedUserId) return;
+            
+            document.getElementById('userSelection').classList.add('hidden');
+            document.getElementById('verificationScreen').classList.add('active');
+            document.getElementById('verifyingUser').textContent = enrolledUsers[selectedUserId].fullName;
+            
+            isRecording = true;
+            phrasesCompleted = 0;
+            keystrokeData = [];
+            
+            setupKeystrokeListeners();
+            document.getElementById('verifyTextarea').focus();
+        }
+        
+        function backToSelection() {
+            selectedUserId = null;
+            isRecording = false;
+            keystrokeData = [];
+            phrasesCompleted = 0;
+            currentPhraseKeystrokes = [];
+            
+            document.getElementById('userSelection').classList.remove('hidden');
+            document.getElementById('verificationScreen').classList.remove('active');
+            document.getElementById('verifyTextarea').value = '';
+            document.getElementById('verifyCount').textContent = '0';
+            document.getElementById('verifyProgress').style.width = '0%';
+            document.getElementById('verifyBtn').classList.add('hidden');
+            document.getElementById('readyIndicator').classList.add('hidden');
+            document.getElementById('verifyResult').innerHTML = '';
+            updateStats();
+            
+            // Reset selection
+            document.getElementById('userSelect').value = '';
+            document.getElementById('selectedUserInfo').classList.add('hidden');
+            document.getElementById('startVerifyBtn').disabled = true;
+        }
+        
+        // Keystroke Capture
+        function setupKeystrokeListeners() {
+            const textarea = document.getElementById('verifyTextarea');
+            
+            textarea.onkeydown = handleKeyDown;
+            textarea.onkeyup = handleKeyUp;
+            textarea.oninput = handleInput;
+        }
+        
+        function handleKeyDown(e) {
+            if (!isRecording) return;
+            
+            const key = e.key;
+            
+            // Backspace resets current phrase
+            if (key === 'Backspace') {
+                currentPhraseKeystrokes = [];
+                document.getElementById('verifyTextarea').value = '';
+                e.preventDefault();
+                return;
+            }
+            
+            // Skip Enter
+            if (key === 'Enter') return;
+            
+            const timestamp = Date.now();
+            if (!keyPressTime[key]) {
+                keyPressTime[key] = timestamp;
+            }
+        }
+        
+        function handleKeyUp(e) {
+            if (!isRecording) return;
+            
+            const key = e.key;
+            if (key === 'Enter' || key === 'Backspace') return;
+            
+            const releaseTime = Date.now();
+            const pressTime = keyPressTime[key];
+            
+            if (pressTime) {
+                const dwellTime = releaseTime - pressTime;
+                const prevKeystroke = currentPhraseKeystrokes[currentPhraseKeystrokes.length - 1];
+                const flightTime = prevKeystroke ? pressTime - prevKeystroke.releaseTime : 0;
+                
+                currentPhraseKeystrokes.push({
+                    key: key,
+                    pressTime: pressTime,
+                    releaseTime: releaseTime,
+                    dwellTime: dwellTime,
+                    flightTime: flightTime
+                });
+                
+                delete keyPressTime[key];
+            }
+        }
+        
+        function handleInput(e) {
+            const textarea = e.target;
+            const text = textarea.value;
+            
+            // Check if Enter was pressed
+            if (text.includes('\n')) {
+                validatePhrase();
+                return;
+            }
+            
+            // Visual feedback
+            const normalized = text.trim().toLowerCase();
+            const expected = PHRASE.toLowerCase();
+            
+            if (normalized.length > 0) {
+                if (expected.startsWith(normalized)) {
+                    textarea.classList.remove('error');
+                    textarea.classList.add('success');
+                } else {
+                    textarea.classList.remove('success');
+                    textarea.classList.add('error');
+                }
+            } else {
+                textarea.classList.remove('success', 'error');
+            }
+        }
+        
+        function validatePhrase() {
+            const textarea = document.getElementById('verifyTextarea');
+            const text = textarea.value.replace('\n', '').trim();
+            const normalized = text.toLowerCase();
+            const expected = PHRASE.toLowerCase();
+            
+            if (normalized === expected && currentPhraseKeystrokes.length > 0) {
+                // Correct phrase
+                keystrokeData.push({
+                    phrase: text,
+                    keystrokes: currentPhraseKeystrokes,
+                    timestamp: Date.now()
+                });
+                
+                phrasesCompleted++;
+                currentPhraseKeystrokes = [];
+                textarea.value = '';
+                textarea.classList.remove('success', 'error');
+                
+                updateProgress();
+                updateStats();
+                
+                if (phrasesCompleted >= 3) {
+                    document.getElementById('verifyBtn').classList.remove('hidden');
+                    document.getElementById('readyIndicator').classList.remove('hidden');
+                }
+            } else {
+                // Incorrect phrase
+                currentPhraseKeystrokes = [];
+                textarea.value = '';
+                textarea.classList.remove('success', 'error');
+            }
+        }
+        
+        function updateProgress() {
+            const percentage = (phrasesCompleted / 3) * 100;
+            document.getElementById('verifyCount').textContent = phrasesCompleted;
+            document.getElementById('verifyProgress').style.width = percentage + '%';
+        }
+        
+        function updateStats() {
+            if (keystrokeData.length === 0) {
+                document.getElementById('verifyAvgSpeed').textContent = '0.0';
+                document.getElementById('verifyDwellTime').textContent = '0';
+                document.getElementById('verifyFlightTime').textContent = '0';
+                return;
+            }
+            
+            let totalDwell = 0, totalFlight = 0, totalTime = 0, totalKeys = 0, flightCount = 0;
+            
+            keystrokeData.forEach(phrase => {
+                phrase.keystrokes.forEach(ks => {
+                    totalDwell += ks.dwellTime;
+                    if (ks.flightTime > 0) {
+                        totalFlight += ks.flightTime;
+                        flightCount++;
+                    }
+                    totalKeys++;
+                });
+                
+                const phraseTime = phrase.keystrokes[phrase.keystrokes.length - 1].releaseTime - 
+                                   phrase.keystrokes[0].pressTime;
+                totalTime += phraseTime;
+            });
+            
+            const avgSpeed = ((totalKeys / totalTime) * 1000).toFixed(1);
+            const avgDwell = (totalDwell / totalKeys).toFixed(0);
+            const avgFlight = flightCount > 0 ? (totalFlight / flightCount).toFixed(0) : 0;
+            
+            document.getElementById('verifyAvgSpeed').textContent = avgSpeed;
+            document.getElementById('verifyDwellTime').textContent = avgDwell;
+            document.getElementById('verifyFlightTime').textContent = avgFlight;
+        }
+        
+        // Perform Verification
+        function performVerification() {
+            if (!selectedUserId || keystrokeData.length < 3) return;
+            
+            isRecording = false;
+            document.getElementById('verifyBtn').disabled = true;
+            document.getElementById('verifyTextarea').disabled = true;
+            
+            // Simulate authentication
+            const result = simulateAuthentication(keystrokeData, enrolledUsers[selectedUserId]);
+            
+            displayResult(result);
+        }
+        
+        function simulateAuthentication(testData, enrolledProfile) {
+            // Calculate test user statistics
+            const testStats = calculateStats(testData);
+            
+            // Compare with enrolled profile
+            const speedDiff = Math.abs(testStats.avgSpeed - enrolledProfile.avgSpeed) / enrolledProfile.avgSpeed;
+            const dwellDiff = Math.abs(testStats.avgDwell - enrolledProfile.avgDwell) / enrolledProfile.avgDwell;
+            const flightDiff = Math.abs(testStats.avgFlight - enrolledProfile.avgFlight) / enrolledProfile.avgFlight;
+            
+            // Calculate similarity score
+            const avgDiff = (speedDiff + dwellDiff + flightDiff) / 3;
+            const similarity = Math.max(0, 100 - (avgDiff * 100));
+            
+            // Determine authentication result
+            const authenticated = similarity >= 70;
+            const matchedPhrases = Math.ceil((similarity / 100) * 3);
+            
+            return {
+                authenticated: authenticated,
+                confidence: similarity.toFixed(1),
+                matchedPhrases: matchedPhrases,
+                totalPhrases: 3,
+                user: enrolledProfile,
+                testStats: testStats
+            };
+        }
+        
+        function calculateStats(data) {
+            let totalDwell = 0, totalFlight = 0, totalTime = 0, totalKeys = 0, flightCount = 0;
+            
+            data.forEach(phrase => {
+                phrase.keystrokes.forEach(ks => {
+                    totalDwell += ks.dwellTime;
+                    if (ks.flightTime > 0) {
+                        totalFlight += ks.flightTime;
+                        flightCount++;
+                    }
+                    totalKeys++;
+                });
+                
+                const phraseTime = phrase.keystrokes[phrase.keystrokes.length - 1].releaseTime - 
+                                   phrase.keystrokes[0].pressTime;
+                totalTime += phraseTime;
+            });
+            
+            return {
+                avgSpeed: (totalKeys / totalTime) * 1000,
+                avgDwell: totalDwell / totalKeys,
+                avgFlight: flightCount > 0 ? totalFlight / flightCount : 0
+            };
+        }
+        
+        function displayResult(result) {
+            const resultDiv = document.getElementById('verifyResult');
+            
+            if (result.authenticated) {
+                resultDiv.innerHTML = `
+                    <div class="result-box success">
+                        <div class="result-icon">✅</div>
+                        <div class="result-title">AUTHENTICATED</div>
+                        <div class="result-subtitle">Identity Verified Successfully</div>
+                        <p style="font-size: 18px; margin: 15px 0;">
+                            Welcome, <strong>${result.user.fullName}</strong>
+                        </p>
+                        <div class="result-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Match Confidence:</span>
+                                <span class="detail-value" style="color: #28a745; font-weight: bold;">${result.confidence}%</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Phrases Matched:</span>
+                                <span class="detail-value">${result.matchedPhrases}/${result.totalPhrases}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Your Typing Speed:</span>
+                                <span class="detail-value">${result.testStats.avgSpeed.toFixed(1)} CPS</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Expected Speed:</span>
+                                <span class="detail-value">${result.user.avgSpeed.toFixed(1)} CPS</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Decision:</span>
+                                <span class="detail-value" style="color: #28a745; font-weight: bold; font-size: 18px;">✓ ACCESS GRANTED</span>
+                            </div>
+                        </div>
+                        <div class="btn-group" style="margin-top: 25px;">
+                            <button class="btn btn-primary" onclick="backToSelection()">
+                                ← Verify Another User
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="result-box danger">
+                        <div class="result-icon">❌</div>
+                        <div class="result-title">AUTHENTICATION FAILED</div>
+                        <div class="result-subtitle">Identity Could Not Be Verified</div>
+                        <p style="font-size: 18px; margin: 15px 0;">
+                            Typing pattern does not match <strong>${result.user.fullName}</strong>
+                        </p>
+                        <div class="result-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Match Confidence:</span>
+                                <span class="detail-value" style="color: #dc3545; font-weight: bold;">${result.confidence}%</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Phrases Matched:</span>
+                                <span class="detail-value">${result.matchedPhrases}/${result.totalPhrases}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Your Typing Speed:</span>
+                                <span class="detail-value">${result.testStats.avgSpeed.toFixed(1)} CPS</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Expected Speed:</span>
+                                <span class="detail-value">${result.user.avgSpeed.toFixed(1)} CPS</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Decision:</span>
+                                <span class="detail-value" style="color: #dc3545; font-weight: bold; font-size: 18px;">✗ ACCESS DENIED</span>
+                            </div>
+                        </div>
+                        <div class="btn-group" style="margin-top: 25px;">
+                            <button class="btn btn-danger" onclick="retryVerification()">
+                                🔄 Try Again
+                            </button>
+                            <button class="btn" style="background: #6c757d; color: white;" onclick="backToSelection()">
+                                ← Change User
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        function retryVerification() {
+            isRecording = true;
+            keystrokeData = [];
+            phrasesCompleted = 0;
+            currentPhraseKeystrokes = [];
+            
+            document.getElementById('verifyTextarea').value = '';
+            document.getElementById('verifyTextarea').disabled = false;
+            document.getElementById('verifyTextarea').classList.remove('success', 'error');
+            document.getElementById('verifyCount').textContent = '0';
+            document.getElementById('verifyProgress').style.width = '0%';
+            document.getElementById('verifyBtn').classList.add('hidden');
+            document.getElementById('verifyBtn').disabled = false;
+            document.getElementById('readyIndicator').classList.add('hidden');
+            document.getElementById('verifyResult').innerHTML = '';
+            updateStats();
+            
+            document.getElementById('verifyTextarea').focus();
+        }
+    </script>
+</body>
+</html>

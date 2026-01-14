@@ -1,7 +1,7 @@
 """
 Keystroke Dynamics - Model Training and Authentication
 This script trains authentication models and evaluates performance
-Updated to handle phrase-based features
+Updated to handle phrase-based features and fill missing values (NaNs)
 """
 
 import numpy as np
@@ -30,26 +30,21 @@ class KeystrokeAuthenticator:
         self.features_df = features_df
         self.model = None
         self.model_type = None
+        # Exclude metadata columns to find the actual feature set
         self.feature_columns = [col for col in features_df.columns 
                                if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         
-    def train_one_class_svm(self, nu=0.1, kernel='rbf', gamma='auto'):
+    def train_one_class_svm(self, nu=0.1, kernel='rbf', gamma='scale'):
         """
         Train One-Class SVM model (best for single-user authentication)
-        
-        Args:
-            nu: Upper bound on fraction of outliers (0.1 = expect 10% outliers)
-            kernel: Kernel type ('rbf', 'linear', 'poly', 'sigmoid')
-            gamma: Kernel coefficient
-            
-        Returns:
-            Trained model
         """
         print("\n" + "="*60)
         print("TRAINING ONE-CLASS SVM")
         print("="*60)
         
-        X = self.features_df[self.feature_columns].values
+        # Clean training data of any unexpected NaNs
+        X_df = self.features_df[self.feature_columns].fillna(0)
+        X = X_df.values
         
         self.model = OneClassSVM(nu=nu, kernel=kernel, gamma=gamma)
         self.model.fit(X)
@@ -67,21 +62,13 @@ class KeystrokeAuthenticator:
         return self.model
     
     def train_isolation_forest(self, contamination=0.1, n_estimators=100):
-        """
-        Train Isolation Forest model
-        
-        Args:
-            contamination: Expected proportion of outliers
-            n_estimators: Number of trees
-            
-        Returns:
-            Trained model
-        """
+        """Train Isolation Forest model"""
         print("\n" + "="*60)
         print("TRAINING ISOLATION FOREST")
         print("="*60)
         
-        X = self.features_df[self.feature_columns].values
+        X_df = self.features_df[self.feature_columns].fillna(0)
+        X = X_df.values
         
         self.model = IsolationForest(
             contamination=contamination,
@@ -102,44 +89,12 @@ class KeystrokeAuthenticator:
         
         return self.model
     
-    def train_distance_based(self, metric='euclidean'):
-        """
-        Train simple distance-based authentication
-        Creates a template from training data
-        
-        Args:
-            metric: Distance metric ('euclidean', 'manhattan', 'mahalanobis')
-        """
-        print("\n" + "="*60)
-        print("TRAINING DISTANCE-BASED MODEL")
-        print("="*60)
-        
-        X = self.features_df[self.feature_columns].values
-        
-        # Create user template (mean of all training samples)
-        self.template = np.mean(X, axis=0)
-        self.template_std = np.std(X, axis=0)
-        self.metric = metric
-        self.model_type = 'DistanceBased'
-        
-        print(f"\n✓ Template created successfully")
-        print(f"✓ Training phrases: {len(X)}")
-        print(f"✓ Features in template: {len(self.template)}")
-        print(f"✓ Distance metric: {metric}")
-        
-        return self.template
-    
     def authenticate(self, new_features, threshold=None):
-        """
-        Authenticate a new typing sample
+        """Authenticate a new typing sample"""
+        # Ensure input handles NaNs
+        if hasattr(new_features, 'fillna'):
+            new_features = new_features.fillna(0)
         
-        Args:
-            new_features: Feature vector for new sample (single phrase)
-            threshold: Decision threshold (auto-calculated if None)
-            
-        Returns:
-            Boolean (True = Genuine, False = Impostor)
-        """
         if self.model_type in ['OneClassSVM', 'IsolationForest']:
             prediction = self.model.predict([new_features])[0]
             return prediction == 1
@@ -156,60 +111,41 @@ class KeystrokeAuthenticator:
                 threshold = np.mean(self.template_std) * 3
             
             return distance < threshold
-    
-    def authenticate_multi_phrase(self, features_list, threshold=0.5):
-        """
-        Authenticate using multiple phrases (majority voting)
-        
-        Args:
-            features_list: List of feature vectors (one per phrase)
-            threshold: Proportion of phrases that must be genuine (0-1)
-            
-        Returns:
-            Boolean (True = Genuine, False = Impostor)
-        """
-        if len(features_list) == 0:
-            return False
-        
-        genuine_count = sum(1 for features in features_list if self.authenticate(features))
-        genuine_ratio = genuine_count / len(features_list)
-        
-        return genuine_ratio >= threshold
-    
+
     def evaluate_with_impostors(self, impostor_features_df):
         """
         Evaluate model with impostor data
-        
-        Args:
-            impostor_features_df: DataFrame with features from impostor users
-            
-        Returns:
-            Dictionary with evaluation metrics
+        (CRITICAL FIX: Handles NaNs and mismatched columns)
         """
         print("\n" + "="*60)
         print("EVALUATION WITH IMPOSTOR DATA")
         print("="*60)
         
-        # Genuine samples (from training data)
-        X_genuine = self.features_df[self.feature_columns].values
+        # 1. Genuine samples (clean up training data)
+        X_genuine = self.features_df[self.feature_columns].fillna(0).values
         y_genuine = np.ones(len(X_genuine))
         
-        # Impostor samples
-        impostor_feature_cols = [col for col in impostor_features_df.columns 
-                                if col in self.feature_columns]
-        X_impostor = impostor_features_df[impostor_feature_cols].values
+        # 2. Impostor samples (CRITICAL FIX)
+        # We enforce strict column alignment.
+        # - If impostor is missing a column the model needs: fill with 0
+        # - If impostor has extra columns: ignore them
+        # - If there are NaNs: fill with 0
+        X_impostor_df = impostor_features_df.reindex(columns=self.feature_columns, fill_value=0)
+        X_impostor_df = X_impostor_df.fillna(0)
+        X_impostor = X_impostor_df.values
+        
         y_impostor = np.zeros(len(X_impostor))
         
-        # Combine data
+        # 3. Combine data
         X_test = np.vstack([X_genuine, X_impostor])
         y_test = np.concatenate([y_genuine, y_impostor])
         
-        # Predict
+        # 4. Predict
         if self.model_type in ['OneClassSVM', 'IsolationForest']:
             y_pred = self.model.predict(X_test)
             y_pred = (y_pred == 1).astype(int)  # Convert -1/1 to 0/1
         
-        # Calculate metrics
+        # 5. Calculate metrics
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
         
         far = fp / (fp + tn) if (fp + tn) > 0 else 0  # False Acceptance Rate
@@ -238,11 +174,12 @@ class KeystrokeAuthenticator:
     
     def plot_confusion_matrix(self, impostor_features_df):
         """Plot confusion matrix"""
-        # Get predictions
-        X_genuine = self.features_df[self.feature_columns].values
-        impostor_feature_cols = [col for col in impostor_features_df.columns 
-                                if col in self.feature_columns]
-        X_impostor = impostor_features_df[impostor_feature_cols].values
+        # Get predictions (using same alignment logic as evaluate)
+        X_genuine = self.features_df[self.feature_columns].fillna(0).values
+        
+        X_impostor_df = impostor_features_df.reindex(columns=self.feature_columns, fill_value=0)
+        X_impostor_df = X_impostor_df.fillna(0)
+        X_impostor = X_impostor_df.values
         
         X_test = np.vstack([X_genuine, X_impostor])
         y_test = np.concatenate([np.ones(len(X_genuine)), np.zeros(len(X_impostor))])
@@ -263,21 +200,22 @@ class KeystrokeAuthenticator:
         plt.tight_layout()
         plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
         print("\n✓ Confusion matrix saved as 'confusion_matrix.png'")
-        plt.show()
+        # plt.show() 
     
-    def save_model(self, filename):
+    def save_model(self, filename, scaler=None):
         """Save trained model to file"""
         model_data = {
             'model': self.model,
             'model_type': self.model_type,
-            'feature_columns': self.feature_columns
+            'feature_columns': self.feature_columns,
+            'scaler': scaler
         }
         
         if self.model_type == 'DistanceBased':
             model_data['template'] = self.template
             model_data['template_std'] = self.template_std
             model_data['metric'] = self.metric
-        
+            
         with open(filename, 'wb') as f:
             pickle.dump(model_data, f)
         
@@ -291,56 +229,13 @@ class KeystrokeAuthenticator:
         self.model = model_data['model']
         self.model_type = model_data['model_type']
         self.feature_columns = model_data['feature_columns']
-        
-        if self.model_type == 'DistanceBased':
-            self.template = model_data['template']
-            self.template_std = model_data['template_std']
-            self.metric = model_data['metric']
-        
-        print(f"\n✓ Model loaded from: {filename}")
 
-
-# Example usage
-if __name__ == "__main__":
-    print("KEYSTROKE DYNAMICS - MODEL TRAINING")
-    print("=" * 60)
+        # Return the scaler if it exists
+        return model_data.get('scaler')
+      
     
-    # Load preprocessed features
-    features_df = pd.read_csv("keystroke_features.csv")
-    
-    print(f"Loaded {len(features_df)} phrases for training")
-    
-    # Initialize authenticator
-    authenticator = KeystrokeAuthenticator(features_df)
-    
-    # Method 1: Train One-Class SVM (Recommended)
-    authenticator.train_one_class_svm(nu=0.1, kernel='rbf')
-    
-    # Method 2: Train Isolation Forest (Alternative)
-    # authenticator.train_isolation_forest(contamination=0.1)
-    
-    # Method 3: Train Distance-Based (Simple)
-    # authenticator.train_distance_based(metric='euclidean')
-    
-    # Save the model
-    authenticator.save_model("keystroke_model.pkl")
-    
-    # If you have impostor data, evaluate the model
-    # impostor_features = pd.read_csv("impostor_features.csv")
-    # metrics = authenticator.evaluate_with_impostors(impostor_features)
-    # authenticator.plot_confusion_matrix(impostor_features)
-    
-    print("\n" + "="*60)
-    print("✓ Model training complete!")
-    print("✓ Model saved and ready for authentication")
-    print("="*60)
-    
-    # Example: Authenticate a new sample (single phrase)
-    # new_phrase_features = [...]  # Feature vector from new phrase
-    # is_genuine = authenticator.authenticate(new_phrase_features)
-    # print(f"Authentication result: {'Genuine' if is_genuine else 'Impostor'}")
-    
-    # Example: Authenticate with multiple phrases (more robust)
-    # phrases_features = [[...], [...], [...]]  # Multiple phrase feature vectors
-    # is_genuine = authenticator.authenticate_multi_phrase(phrases_features, threshold=0.7)
-    # print(f"Multi-phrase result: {'Genuine' if is_genuine else 'Impostor'}")
+    def decision_score(self, new_features):
+        if self.model_type == 'OneClassSVM':
+            return self.model.decision_function([new_features])[0]
+        elif self.model_type == 'IsolationForest':
+            return self.model.decision_function([new_features])[0]
