@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Keystroke Verification</title>
+
+<style>
+:root {
+    --primary: #2563eb;
+    --bg: #f8fafc;
+    --text: #1e293b;
+    --border: #e2e8f0;
+    --success: #16a34a;
+    --error: #dc2626;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    background: white;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+select, textarea, button {
+    width: 100%;
+    font-size: 16px;
+}
+
+select {
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+}
+
+textarea {
+    padding: 15px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    font-family: monospace;
+    resize: none;
+    height: 100px;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+textarea.success {
+    border-color: var(--success);
+    background: #ecfdf5;
+}
+
+textarea.error {
+    border-color: var(--error);
+    background: #fef2f2;
+}
+
+.target {
+    background: #f1f5f9;
+    padding: 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    margin-bottom: 12px;
+    color: #475569;
+}
+
+button {
+    margin-top: 20px;
+    padding: 14px;
+    background: var(--primary);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.result {
+    margin-top: 25px;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.result.success {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.result.fail {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.hidden {
+    display: none;
+}
+
+.tip {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #64748b;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>🔐 Secure Verification</h1>
+
+    <!-- USER SELECTION -->
+    <div id="userSection">
+        <label>Select user</label>
+        <select id="userSelect">
+            <option value="">Loading users…</option>
+        </select>
+
+        <button id="startBtn" disabled>Start Verification</button>
+    </div>
+
+    <!-- VERIFICATION -->
+    <div id="verifySection" class="hidden">
+        <label>Type the phrase</label>
+        <div class="target">The quick brown fox jumps over the lazy dog</div>
+
+        <textarea id="typingArea"
+            placeholder="Start typing… (BACKSPACE to restart)">
+        </textarea>
+
+        <div class="tip">Press BACKSPACE anytime to cancel and restart</div>
+
+        <button id="verifyBtn">Verify</button>
+
+        <div id="resultBox"></div>
+    </div>
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:5000/api";
+const TARGET = "the quick brown fox jumps over the lazy dog";
+
+let selectedUser = "";
+let keystrokes = [];
+let pressTimes = {};
+
+// Load users
+async function loadUsers() {
+    try {
+        const res = await fetch(`${API_URL}/users`);
+        const data = await res.json();
+        const select = document.getElementById("userSelect");
+
+        select.innerHTML = '<option value="">-- Select user --</option>';
+        data.users.forEach(u => {
+            const opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = u.name;
+            select.appendChild(opt);
+        });
+    } catch {
+        alert("Server not running");
+    }
+}
+loadUsers();
+
+// Enable start
+userSelect.addEventListener("change", e => {
+    document.getElementById("startBtn").disabled = !e.target.value;
+});
+
+// Start verification
+startBtn.addEventListener("click", () => {
+    selectedUser = userSelect.value;
+    userSection.classList.add("hidden");
+    verifySection.classList.remove("hidden");
+    typingArea.focus();
+    resetAttempt();
+});
+
+// Keystroke capture
+typingArea.addEventListener("keydown", e => {
+    if (e.key === "Backspace") {
+        e.preventDefault();
+        resetAttempt();
+        return;
+    }
+    if (e.key === "Enter") return;
+
+    if (!pressTimes[e.code]) {
+        pressTimes[e.code] = Date.now();
+    }
+});
+
+typingArea.addEventListener("keyup", e => {
+    if (e.key === "Enter" || e.key === "Backspace") return;
+
+    const release = Date.now();
+    const press = pressTimes[e.code];
+    if (!press) return;
+
+    const prev = keystrokes.at(-1);
+    keystrokes.push({
+        key: e.key,
+        pressTime: press,
+        releaseTime: release,
+        dwellTime: release - press,
+        flightTime: prev ? press - prev.releaseTime : 0
+    });
+
+    delete pressTimes[e.code];
+});
+
+// Live correctness feedback
+typingArea.addEventListener("input", () => {
+    const val = typingArea.value.toLowerCase();
+    if (TARGET.startsWith(val)) {
+        typingArea.classList.add("success");
+        typingArea.classList.remove("error");
+    } else {
+        typingArea.classList.add("error");
+        typingArea.classList.remove("success");
+    }
+});
+
+// Verify
+verifyBtn.addEventListener("click", async () => {
+    if (typingArea.value.toLowerCase().trim() !== TARGET) {
+        alert("Phrase does not match exactly");
+        return;
+    }
+
+    verifyBtn.disabled = true;
+
+    const res = await fetch(`${API_URL}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            claimedUser: selectedUser,
+            keystrokes
+        })
+    });
+
+    const data = await res.json();
+    showResult(data);
+    verifyBtn.disabled = false;
+});
+
+function showResult(data) {
+    resultBox.innerHTML = `
+        <div class="result ${data.authenticated ? "success" : "fail"}">
+            <h3>${data.authenticated ? "✅ Access Granted" : "⛔ Access Denied"}</h3>
+            <p>User: <strong>${data.user}</strong></p>
+            <p>Confidence: ${data.confidence}%</p>
+
+            <div class="actions">
+                <button onclick="retry()">Retry</button>
+                <button onclick="changeUser()">Change user</button>
+            </div>
+        </div>
+    `;
+}
+
+function resetAttempt() {
+    keystrokes = [];
+    pressTimes = {};
+    typingArea.value = "";
+    typingArea.classList.remove("success", "error");
+    resultBox.innerHTML = "";
+}
+
+function retry() {
+    resetAttempt();
+    typingArea.focus();
+}
+
+function changeUser() {
+    resetAttempt();
+    verifySection.classList.add("hidden");
+    userSection.classList.remove("hidden");
+    userSelect.value = "";
+    startBtn.disabled = true;
+}
+</script>
+
+</body>
+</html>
