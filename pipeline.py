@@ -44,6 +44,18 @@ def main():
 
     print(f"✓ Found {len(genuine_files)} Genuine Users")
     print(f"✓ Found {len(impostor_files)} Dedicated Impostor Files")
+
+    # PER-USER TUNING CONFIGURATION
+    # Contamination: Higher = Stricter Model (Reject more "weird" self-typing to keep hackers out)
+    # n_estimators: Higher = Smoother decision boundary (Good for messy data)
+    USER_CONFIG = {
+        'user_ferola': {'contamination': 0.21, 'n_estimators': 500},
+        'user_chiara': {'contamination': 0.14, 'n_estimators': 400},
+        'user_iga':    {'contamination': 0.08, 'n_estimators': 300},
+    }
+    
+    # Default settings for any new users not in the list
+    DEFAULT_CONFIG = {'contamination': 0.05, 'n_estimators': 300}
     
     overall_metrics = []
 
@@ -77,16 +89,14 @@ def main():
         print(f"-> Training Isolation Forest...")
         authenticator = KeystrokeAuthenticator(processed_features)
         
-        # DYNAMIC TUNING:
-        # If the user is 'user_jolaaa', we need to be STRICTER because she has high variance.
-        if user_name == 'user_jolaaa':
-            # Contamination 0.15 = "Reject the roughly 15% most erratic samples"
-            # This tightens the circle around her 'core' typing behavior.
-            print("   (Applying stricter parameters for high-variance user)")
-            authenticator.train_isolation_forest(contamination=0.15, n_estimators=300)
-        else:
-            # Default for good users (Iga, Chiara)
-            authenticator.train_isolation_forest(contamination=0.01, n_estimators=200)
+        # GET CONFIG FOR CURRENT USER
+        config = USER_CONFIG.get(user_name, DEFAULT_CONFIG)
+        
+        print(f"   (Using parameters: {config})")
+        authenticator.train_isolation_forest(
+            contamination=config['contamination'], 
+            n_estimators=config['n_estimators']
+        )
             
         model_filename = MODELS_DIR / f"model_{user_name}.pkl"
         authenticator.save_model(str(model_filename), scaler=trained_scaler)
