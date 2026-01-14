@@ -79,7 +79,7 @@
     </div>
 
     <div class="typing-area">
-        <div class="target-phrase">The quick brown fox jumps over the lazy dog</div>
+        <div class="target-phrase">the quick brown fox jumps over the lazy dog</div>
         <textarea id="inputField" placeholder="Type the phrase above..." disabled></textarea>
         <div class="status-bar"><div class="status-fill" id="progressBar"></div></div>
     </div>
@@ -104,8 +104,18 @@
             select.innerHTML = '<option value="">-- Select Identity --</option>';
             users.forEach(u => {
                 const opt = document.createElement('option');
+                
+                // BACKEND VALUE: Keep "user_iga" (The file name)
                 opt.value = u;
-                opt.textContent = u;
+                
+                // VISUAL TEXT: Convert "user_iga" -> "Iga"
+                // 1. Remove "user_"
+                // 2. Capitalize first letter
+                let cleanName = u.replace('user_', '');
+                cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+                
+                opt.textContent = cleanName;
+                
                 select.appendChild(opt);
             });
         } catch(e) {
@@ -159,6 +169,11 @@
 
     async function submitVerification() {
         const userId = document.getElementById('userSelect').value;
+        
+        // Create a "Pretty Name" for display only
+        let displayName = userId.replace('user_', '');
+        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+
         input.disabled = true;
         
         const resultBox = document.getElementById('resultBox');
@@ -182,15 +197,13 @@
                 resultBox.className = 'result-overlay success';
                 resultBox.innerHTML = `
                     <h3>✅ Access Granted</h3>
-                    <p>Identity verified as <strong>${userId}</strong></p>
-                    <small>Score: ${data.score.toFixed(3)}</small>
+                    <p>Identity verified as <strong>${displayName}</strong></p> <small>Score: ${data.score.toFixed(3)}</small>
                 `;
             } else {
                 resultBox.className = 'result-overlay fail';
                 resultBox.innerHTML = `
                     <h3>⛔ Access Denied</h3>
-                    <p>Typing pattern mismatch.</p>
-                    <small>Score: ${data.score.toFixed(3)}</small>
+                    <p>Typing pattern mismatch for <strong>${displayName}</strong>.</p> <small>Score: ${data.score.toFixed(3)}</small>
                 `;
             }
             
