@@ -4,6 +4,7 @@ Features:
 - Multi-user training with Isolation Forest
 - Robust Data Normalization (Fixes the 50% accuracy bug)
 - Feature Alignment
+- Automatic ROC Curve and Confusion Matrix generation
 """
 
 import sys
@@ -22,6 +23,8 @@ GENUINE_DIR = DATA_DIR / "genuine"
 IMPOSTOR_DIR = DATA_DIR / "impostors"
 MODELS_DIR = Path("models")
 MODELS_DIR.mkdir(exist_ok=True)
+IMG_DIR = Path("img")
+IMG_DIR.mkdir(exist_ok=True)
 
 def print_header(title):
     print("\n" + "="*80)
@@ -131,15 +134,16 @@ def main():
         if all_impostor_features:
             impostor_df = pd.concat(all_impostor_features, ignore_index=True)
             
+            # Note: evaluate_with_impostors now generates the ROC curve internally
             metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=user_name)
             metrics['User'] = user_name
             overall_metrics.append(metrics)
             
             try:
-                authenticator.plot_confusion_matrix(impostor_df)
-                if os.path.exists('confusion_matrix.png'):
-                    os.rename('confusion_matrix.png', f'confusion_matrix_{user_name}.png')
-            except: pass
+                # UPDATED: Pass user_name so it saves to the correct filename in img/
+                authenticator.plot_confusion_matrix(impostor_df, user_name=user_name)
+            except Exception as e:
+                print(f"Warning: Could not plot confusion matrix: {e}")
 
     # --- REPORT ---
     print_header("FINAL REPORT")
@@ -151,7 +155,7 @@ def main():
         print(f"\nAVERAGE EER: {results_df['EER'].mean()*100:.2f}%")
         
         best = results_df.loc[results_df['EER'].idxmin()]
-        print(f" Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
+        print(f"🏆 Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
 
 if __name__ == "__main__":
     main()
