@@ -131,7 +131,7 @@ def main():
         if all_impostor_features:
             impostor_df = pd.concat(all_impostor_features, ignore_index=True)
             
-            metrics = authenticator.evaluate_with_impostors(impostor_df)
+            metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=user_name)
             metrics['User'] = user_name
             overall_metrics.append(metrics)
             

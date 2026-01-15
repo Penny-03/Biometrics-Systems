@@ -11,6 +11,7 @@ import seaborn as sns
 from sklearn.svm import OneClassSVM
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import cross_val_score
 import pickle
@@ -112,65 +113,73 @@ class KeystrokeAuthenticator:
             
             return distance < threshold
 
-    def evaluate_with_impostors(self, impostor_features_df):
+    def evaluate_with_impostors(self, impostor_features_df, user_name="Unknown"):
         """
-        Evaluate model with impostor data
-        (CRITICAL FIX: Handles NaNs and mismatched columns)
+        Evaluate model with impostor data AND Plot ROC Curve
         """
         print("\n" + "="*60)
         print("EVALUATION WITH IMPOSTOR DATA")
         print("="*60)
         
-        # 1. Genuine samples (clean up training data)
+        # 1. Prepare Data
         X_genuine = self.features_df[self.feature_columns].fillna(0).values
-        y_genuine = np.ones(len(X_genuine))
+        y_genuine = np.ones(len(X_genuine)) # 1 = Genuine
         
-        # 2. Impostor samples (CRITICAL FIX)
-        # We enforce strict column alignment.
-        # - If impostor is missing a column the model needs: fill with 0
-        # - If impostor has extra columns: ignore them
-        # - If there are NaNs: fill with 0
         X_impostor_df = impostor_features_df.reindex(columns=self.feature_columns, fill_value=0)
         X_impostor_df = X_impostor_df.fillna(0)
         X_impostor = X_impostor_df.values
+        y_impostor = np.zeros(len(X_impostor)) # 0 = Impostor
         
-        y_impostor = np.zeros(len(X_impostor))
-        
-        # 3. Combine data
+        # Combine
         X_test = np.vstack([X_genuine, X_impostor])
         y_test = np.concatenate([y_genuine, y_impostor])
         
-        # 4. Predict
-        if self.model_type in ['OneClassSVM', 'IsolationForest']:
-            y_pred = self.model.predict(X_test)
-            y_pred = (y_pred == 1).astype(int)  # Convert -1/1 to 0/1
+        # 2. Get Predictions AND Scores
+        # Predict: Returns 1 (Normal) or -1 (Anomaly) -> Convert to 1/0
+        y_pred = self.model.predict(X_test)
+        y_pred = (y_pred == 1).astype(int) 
         
-        # 5. Calculate metrics
+        # Decision Function: Raw scores (Positive = Normal, Negative = Anomaly)
+        y_scores = self.model.decision_function(X_test)
+        
+        # 3. Calculate Metrics
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+        far = fp / (fp + tn) if (fp + tn) > 0 else 0
+        frr = fn / (fn + tp) if (fn + tp) > 0 else 0
+        accuracy = (tp + tn) / len(y_test)
         
-        far = fp / (fp + tn) if (fp + tn) > 0 else 0  # False Acceptance Rate
-        frr = fn / (fn + tp) if (fn + tp) > 0 else 0  # False Rejection Rate
-        accuracy = (tp + tn) / (tp + tn + fp + fn)
-        
-        metrics = {
+        # 4. PLOT ROC CURVE
+        try:
+            fpr, tpr, thresholds = roc_curve(y_test, y_scores)
+            roc_auc = auc(fpr, tpr)
+            
+            plt.figure(figsize=(8, 6))
+            plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+            plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--') # Diagonal line
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Match Rate (FMR)')
+            plt.ylabel('True Match Rate (1 - FNMR)')
+            plt.title(f'ROC Curve - {user_name}')
+            plt.legend(loc="lower right")
+            plt.grid(True)
+            
+            # Save the plot
+            filename = f"roc_curve_{user_name}.png"
+            plt.savefig(filename)
+            print(f"✓ ROC Curve saved as '{filename}'")
+            plt.close()
+            
+        except Exception as e:
+            print(f"⚠ Could not plot ROC: {e}")
+
+        # Return metrics
+        return {
             'FAR': far,
             'FRR': frr,
             'Accuracy': accuracy,
-            'True Positives': tp,
-            'True Negatives': tn,
-            'False Positives': fp,
-            'False Negatives': fn
+            'AUC': roc_auc
         }
-        
-        print(f"\nGenuine phrases: {len(X_genuine)}")
-        print(f"Impostor phrases: {len(X_impostor)}")
-        print(f"\nRESULTS:")
-        print(f"  Accuracy:  {accuracy*100:.2f}%")
-        print(f"  FAR:       {far*100:.2f}%  (Impostors accepted)")
-        print(f"  FRR:       {frr*100:.2f}%  (Genuine users rejected)")
-        print(f"  EER:       ~{((far + frr)/2)*100:.2f}%")
-        
-        return metrics
     
     def plot_confusion_matrix(self, impostor_features_df):
         """Plot confusion matrix"""
