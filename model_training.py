@@ -93,25 +93,13 @@ class KeystrokeAuthenticator:
     def authenticate(self, new_features, threshold=None):
         """Authenticate a new typing sample"""
         # Ensure input handles NaNs
+        #to FIX needs a scaler
         if hasattr(new_features, 'fillna'):
             new_features = new_features.fillna(0)
         
         if self.model_type in ['OneClassSVM', 'IsolationForest']:
             prediction = self.model.predict([new_features])[0]
             return prediction == 1
-        
-        elif self.model_type == 'DistanceBased':
-            # Calculate distance to template
-            if self.metric == 'euclidean':
-                distance = np.linalg.norm(new_features - self.template)
-            elif self.metric == 'manhattan':
-                distance = np.sum(np.abs(new_features - self.template))
-            
-            # Auto-calculate threshold if not provided
-            if threshold is None:
-                threshold = np.mean(self.template_std) * 3
-            
-            return distance < threshold
 
     def evaluate_with_impostors(self, impostor_features_df, user_name="Unknown"):
         """
@@ -220,10 +208,7 @@ class KeystrokeAuthenticator:
             'scaler': scaler
         }
         
-        if self.model_type == 'DistanceBased':
-            model_data['template'] = self.template
-            model_data['template_std'] = self.template_std
-            model_data['metric'] = self.metric
+       
             
         with open(filename, 'wb') as f:
             pickle.dump(model_data, f)
