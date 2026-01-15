@@ -32,7 +32,7 @@ def print_header(title):
     print("="*80)
 
 def main():
-    print_header("KEYSTROKE DYNAMICS AUTHENTICATION - FIXED PIPELINE")
+    print_header("KEYSTROKE DYNAMICS AUTHENTICATION - ANONYMIZED REPORT")
     
     if not GENUINE_DIR.exists():
         print(f"❌ Error: Directory {GENUINE_DIR} not found.")
@@ -48,100 +48,89 @@ def main():
     print(f"✓ Found {len(genuine_files)} Genuine Users")
     print(f"✓ Found {len(impostor_files)} Dedicated Impostor Files")
 
-    # PER-USER TUNING CONFIGURATION
-    # Contamination: Higher = Stricter Model (Reject more "weird" self-typing to keep hackers out)
-    # n_estimators: Higher = Smoother decision boundary (Good for messy data)
+    # --- ANONYMIZATION MAPPING ---
+    # Map internal filenames to Report Labels
+    # User 1 = Iga (The Sheep / Best)
+    # User 2 = Chiara (The Lamb / Middle)
+    # User 3 = Ferola (The Goat / High Variance)
+    ANONYMOUS_MAP = {
+        'user_iga':    'User 1',
+        'user_chiara': 'User 2',
+        'user_ferola': 'User 3'
+    }
+
+    # CONFIGURATION
     USER_CONFIG = {
         'user_ferola': {'contamination': 0.21, 'n_estimators': 500},
         'user_chiara': {'contamination': 0.14, 'n_estimators': 400},
         'user_iga':    {'contamination': 0.08, 'n_estimators': 300},
     }
-    
-    # Default settings for any new users not in the list
     DEFAULT_CONFIG = {'contamination': 0.05, 'n_estimators': 300}
     
     overall_metrics = []
 
     for user_file in genuine_files:
-        user_name = user_file.stem
-        print_header(f"PROCESSING USER: {user_name}")
+        real_name = user_file.stem  # e.g., "user_iga"
         
-        # --- 1. EXTRACT (Genuine) ---
-        print(f"-> Extracting features...")
+        # Determine the display name for the Report/Plots
+        display_name = ANONYMOUS_MAP.get(real_name, real_name)
+        
+        print_header(f"PROCESSING: {display_name} ({real_name})")
+        
+        # --- 1. EXTRACT ---
         extractor = KeystrokeFeatureExtractor(str(user_file))
         extractor.load_data()
         features_df = extractor.extract_all_features()
-        print(f"   ✓ Extracted {len(features_df)} phrases")
 
-        # --- 2. PREPROCESS (Train) ---
-        print(f"-> Preprocessing & Fitting Scaler...")
+        # --- 2. PREPROCESS ---
         preprocessor = KeystrokePreprocessor(features_df)
         preprocessor.identify_feature_columns()
-        
-        # Relaxed outliers
         preprocessor.handle_outliers(method='iqr', threshold=3.5)
-        
-        # FIT THE SCALER HERE
         processed_features, trained_scaler = preprocessor.fit_transform_scaler(method='standard')
-        
-        # Save the list of columns we used for training (The Master List)
         master_feature_list = preprocessor.feature_columns
-        print(f"   ✓ Training with {len(master_feature_list)} features")
         
-        # --- 3. TRAIN (Isolation Forest) ---
-        print(f"-> Training Isolation Forest...")
+        # --- 3. TRAIN ---
         authenticator = KeystrokeAuthenticator(processed_features)
-        
-        # GET CONFIG FOR CURRENT USER
-        config = USER_CONFIG.get(user_name, DEFAULT_CONFIG)
+        config = USER_CONFIG.get(real_name, DEFAULT_CONFIG)
         
         print(f"   (Using parameters: {config})")
         authenticator.train_isolation_forest(
             contamination=config['contamination'], 
             n_estimators=config['n_estimators']
         )
-            
-        model_filename = MODELS_DIR / f"model_{user_name}.pkl"
+        
+        # Save model using REAL name (so the App still works!)
+        model_filename = MODELS_DIR / f"model_{real_name}.pkl"
         authenticator.save_model(str(model_filename), scaler=trained_scaler)
         
-        # --- 4. EVALUATE (Attack) ---
-        print(f"-> Evaluating against attacks...")
-        
+        # --- 4. EVALUATE ---
         other_genuine = [f for f in genuine_files if f != user_file]
         attack_files = impostor_files + other_genuine
         
         all_impostor_features = []
-        
         for imp_file in attack_files:
             if not imp_file.exists(): continue
-            
-            # Extract Impostor Features
             imp_extractor = KeystrokeFeatureExtractor(str(imp_file))
             imp_extractor.load_data()
             imp_feats = imp_extractor.extract_all_features()
             
-            # PREPROCESS (Test) - CRITICAL STEP
             imp_preprocessor = KeystrokePreprocessor(imp_feats)
-            
-            # A. ALIGN columns to match Genuine User exactly (Fill missing with 0)
             imp_preprocessor.align_columns(master_feature_list)
-            
-            # B. SCALE using the Genuine User's scaler (Do not re-fit!)
             imp_preprocessor.transform_with_scaler(trained_scaler)
-            
             all_impostor_features.append(imp_preprocessor.features_df)
             
         if all_impostor_features:
             impostor_df = pd.concat(all_impostor_features, ignore_index=True)
             
-            # Note: evaluate_with_impostors now generates the ROC curve internally
-            metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=user_name)
-            metrics['User'] = user_name
+            # --- CRITICAL CHANGE HERE ---
+            # Pass 'display_name' (User 1) so the plot Title and Filename are anonymized
+            metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=display_name)
+            metrics['User'] = display_name # Save anonymous name to table
             overall_metrics.append(metrics)
             
             try:
-                # UPDATED: Pass user_name so it saves to the correct filename in img/
-                authenticator.plot_confusion_matrix(impostor_df, user_name=user_name)
+                # Pass 'display_name' here too
+                authenticator.plot_confusion_matrix(impostor_df, user_name=display_name)
             except Exception as e:
                 print(f"Warning: Could not plot confusion matrix: {e}")
 
@@ -153,9 +142,6 @@ def main():
         
         print(results_df[['User', 'FAR', 'FRR', 'EER', 'Accuracy']].to_string(index=False))
         print(f"\nAVERAGE EER: {results_df['EER'].mean()*100:.2f}%")
-        
-        best = results_df.loc[results_df['EER'].idxmin()]
-        print(f"🏆 Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
 
 if __name__ == "__main__":
     main()
