@@ -16,6 +16,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import cross_val_score
 import pickle
 import warnings
+import os # Import os to handle paths safely
 warnings.filterwarnings('ignore')
 
 class KeystrokeAuthenticator:
@@ -152,8 +153,8 @@ class KeystrokeAuthenticator:
             plt.legend(loc="lower right")
             plt.grid(True)
             
-            # Save the plot
-            filename = f"roc_curve_{user_name}.png"
+            # Save the plot into 'img' folder
+            filename = os.path.join("img", f"roc_curve_{user_name}.png")
             plt.savefig(filename)
             print(f"✓ ROC Curve saved as '{filename}'")
             plt.close()
@@ -169,7 +170,7 @@ class KeystrokeAuthenticator:
             'AUC': roc_auc
         }
     
-    def plot_confusion_matrix(self, impostor_features_df):
+    def plot_confusion_matrix(self, impostor_features_df, user_name="Unknown"):
         """Plot confusion matrix"""
         # Get predictions (using same alignment logic as evaluate)
         X_genuine = self.features_df[self.feature_columns].fillna(0).values
@@ -191,13 +192,16 @@ class KeystrokeAuthenticator:
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                    xticklabels=['Impostor', 'Genuine'],
                    yticklabels=['Impostor', 'Genuine'])
-        plt.title(f'Confusion Matrix - {self.model_type}')
+        plt.title(f'Confusion Matrix - {self.model_type} ({user_name})')
         plt.ylabel('True Label')
         plt.xlabel('Predicted Label')
         plt.tight_layout()
-        plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
-        print("\n✓ Confusion matrix saved as 'confusion_matrix.png'")
-        # plt.show() 
+        
+        # Save the plot into 'img' folder
+        filename = os.path.join("img", f"confusion_matrix_{user_name}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\n✓ Confusion matrix saved as '{filename}'")
+        plt.close() # Close to free up memory
     
     def save_model(self, filename, scaler=None):
         """Save trained model to file"""
@@ -207,8 +211,6 @@ class KeystrokeAuthenticator:
             'feature_columns': self.feature_columns,
             'scaler': scaler
         }
-        
-       
             
         with open(filename, 'wb') as f:
             pickle.dump(model_data, f)
@@ -227,7 +229,6 @@ class KeystrokeAuthenticator:
         # Return the scaler if it exists
         return model_data.get('scaler')
       
-    
     def decision_score(self, new_features):
         if self.model_type == 'OneClassSVM':
             return self.model.decision_function([new_features])[0]
