@@ -49,10 +49,6 @@ def main():
     print(f"✓ Found {len(impostor_files)} Dedicated Impostor Files")
 
     # --- ANONYMIZATION MAPPING ---
-    # Map internal filenames to Report Labels
-    # User 1 = Iga (The Sheep / Best)
-    # User 2 = Chiara (The Lamb / Middle)
-    # User 3 = Ferola (The Goat / High Variance)
     ANONYMOUS_MAP = {
         'user_iga':    'User 1',
         'user_chiara': 'User 2',
@@ -61,16 +57,16 @@ def main():
 
     # CONFIGURATION
     USER_CONFIG = {
-        'user_ferola': {'contamination': 0.21, 'n_estimators': 500},
+        'user_ferola': {'contamination': 0.21, 'n_estimators': 600},
         'user_chiara': {'contamination': 0.14, 'n_estimators': 400},
         'user_iga':    {'contamination': 0.08, 'n_estimators': 300},
     }
-    DEFAULT_CONFIG = {'contamination': 0.05, 'n_estimators': 300}
+    DEFAULT_CONFIG = {'contamination': 0.1, 'n_estimators': 300}
     
     overall_metrics = []
 
     for user_file in genuine_files:
-        real_name = user_file.stem  # e.g., "user_iga"
+        real_name = user_file.stem
         
         # Determine the display name for the Report/Plots
         display_name = ANONYMOUS_MAP.get(real_name, real_name)
@@ -122,7 +118,6 @@ def main():
         if all_impostor_features:
             impostor_df = pd.concat(all_impostor_features, ignore_index=True)
             
-            # --- CRITICAL CHANGE HERE ---
             # Pass 'display_name' (User 1) so the plot Title and Filename are anonymized
             metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=display_name)
             metrics['User'] = display_name # Save anonymous name to table
