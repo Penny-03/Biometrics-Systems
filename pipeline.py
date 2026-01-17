@@ -135,8 +135,16 @@ def main():
         results_df = pd.DataFrame(overall_metrics)
         results_df['EER'] = (results_df['FAR'] + results_df['FRR']) / 2
         
-        print(results_df[['User', 'FAR', 'FRR', 'EER', 'Accuracy']].to_string(index=False))
+        # ADD 'd_prime' TO THIS LIST ▼
+        print(results_df[['User', 'FAR', 'FRR', 'EER', 'Accuracy', 'd_prime']].to_string(index=False))
+        
         print(f"\nAVERAGE EER: {results_df['EER'].mean()*100:.2f}%")
+        
+        # Optional: Print Average d' to show overall system separability
+        print(f"AVERAGE d':   {results_df['d_prime'].mean():.4f}")
+        
+        best = results_df.loc[results_df['EER'].idxmin()]
+        print(f" Best User: {best['User']} (EER: {best['EER']*100:.2f}%)")
 
 if __name__ == "__main__":
     main()

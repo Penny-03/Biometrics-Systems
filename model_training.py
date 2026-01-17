@@ -63,7 +63,7 @@ class KeystrokeAuthenticator:
         
         return self.model
     
-    def train_isolation_forest(self, contamination=0.1, n_estimators=100):
+    def train_isolation_forest(self, contamination=0.1, n_estimators=100, random_state=42):
         """Train Isolation Forest model"""
         print("\n" + "="*60)
         print("TRAINING ISOLATION FOREST")
@@ -75,7 +75,7 @@ class KeystrokeAuthenticator:
         self.model = IsolationForest(
             contamination=contamination,
             n_estimators=n_estimators,
-            random_state=42
+            random_state=random_state
         )
         self.model.fit(X)
         self.model_type = 'IsolationForest'
@@ -131,6 +131,31 @@ class KeystrokeAuthenticator:
         # Decision Function: Raw scores (Positive = Normal, Negative = Anomaly)
         y_scores = self.model.decision_function(X_test)
         
+        # --- NEW SECTION: CALCULATE d' (d-prime) ---
+        # We need to separate the scores back into 'Genuine' and 'Impostor' groups
+        # to calculate the distance between their distributions.
+        n_genuine = len(X_genuine)
+        gen_scores = y_scores[:n_genuine]
+        imp_scores = y_scores[n_genuine:]
+        
+        # Calculate Mean (mu) and Standard Deviation (sigma)
+        mu_gen = np.mean(gen_scores)
+        mu_imp = np.mean(imp_scores)
+        sigma_gen = np.std(gen_scores)
+        sigma_imp = np.std(imp_scores)
+        
+        # Calculate d-prime
+        # Formula: sqrt(2) * |mean1 - mean2| / sqrt(var1 + var2)
+        denominator = np.sqrt(sigma_gen**2 + sigma_imp**2)
+        
+        if denominator == 0:
+            d_prime = 0.0
+        else:
+            d_prime = (np.sqrt(2) * abs(mu_gen - mu_imp)) / denominator
+            
+        print(f" d' (Separability Index): {d_prime:.4f}")
+        # ---------------------------------------------
+        
         # 3. Calculate Metrics
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
         far = fp / (fp + tn) if (fp + tn) > 0 else 0
@@ -162,12 +187,13 @@ class KeystrokeAuthenticator:
         except Exception as e:
             print(f"⚠ Could not plot ROC: {e}")
 
-        # Return metrics
+        # Return metrics (Added d_prime here)
         return {
             'FAR': far,
             'FRR': frr,
             'Accuracy': accuracy,
-            'AUC': roc_auc
+            'AUC': roc_auc,
+            'd_prime': d_prime 
         }
     
     def plot_confusion_matrix(self, impostor_features_df, user_name="Unknown"):
