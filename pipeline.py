@@ -45,11 +45,9 @@ def main():
     print(f"✓ Found {len(genuine_files)} Genuine Users")
     print(f"✓ Found {len(impostor_files)} Dedicated Impostor Files")
 
-    # PER-USER TUNING CONFIGURATION
-    # Contamination: Higher = Stricter Model (Reject more "weird" self-typing to keep hackers out)
-    # n_estimators: Higher = Smoother decision boundary (Good for messy data)
+    # CONFIGURATION    
     USER_CONFIG = {
-        'user_ferola': {'contamination': 0.21, 'n_estimators': 500},
+        'user_ferola': {'contamination': 0.21, 'n_estimators': 600},
         'user_chiara': {'contamination': 0.14, 'n_estimators': 400},
         'user_iga':    {'contamination': 0.08, 'n_estimators': 300},
     }

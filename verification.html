@@ -197,7 +197,10 @@ async function loadUsers() {
         data.users.forEach(u => {
             const opt = document.createElement("option");
             opt.value = u.id;
-            opt.textContent = u.name;
+            console.log(u)
+            let cleanName = u.name.replace('model_user_', '');
+            cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+            opt.textContent = cleanName;
             select.appendChild(opt);
         });
     } catch {
