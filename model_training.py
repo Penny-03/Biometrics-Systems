@@ -11,10 +11,12 @@ import seaborn as sns
 from sklearn.svm import OneClassSVM
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import cross_val_score
 import pickle
 import warnings
+import os # Import os to handle paths safely
 warnings.filterwarnings('ignore')
 
 class KeystrokeAuthenticator:
@@ -61,7 +63,7 @@ class KeystrokeAuthenticator:
         
         return self.model
     
-    def train_isolation_forest(self, contamination=0.1, n_estimators=100):
+    def train_isolation_forest(self, contamination=0.1, n_estimators=100, random_state=42):
         """Train Isolation Forest model"""
         print("\n" + "="*60)
         print("TRAINING ISOLATION FOREST")
@@ -73,7 +75,7 @@ class KeystrokeAuthenticator:
         self.model = IsolationForest(
             contamination=contamination,
             n_estimators=n_estimators,
-            random_state=42
+            random_state=random_state
         )
         self.model.fit(X)
         self.model_type = 'IsolationForest'
@@ -100,67 +102,101 @@ class KeystrokeAuthenticator:
             prediction = self.model.predict([new_features])[0]
             return prediction == 1
 
-    def evaluate_with_impostors(self, impostor_features_df):
+    def evaluate_with_impostors(self, impostor_features_df, user_name="Unknown"):
         """
-        Evaluate model with impostor data
-        (CRITICAL FIX: Handles NaNs and mismatched columns)
+        Evaluate model with impostor data AND Plot ROC Curve
         """
         print("\n" + "="*60)
         print("EVALUATION WITH IMPOSTOR DATA")
         print("="*60)
         
-        # 1. Genuine samples (clean up training data)
+        # 1. Prepare Data
         X_genuine = self.features_df[self.feature_columns].fillna(0).values
-        y_genuine = np.ones(len(X_genuine))
+        y_genuine = np.ones(len(X_genuine)) # 1 = Genuine
         
-        # 2. Impostor samples (CRITICAL FIX)
-        # We enforce strict column alignment.
-        # - If impostor is missing a column the model needs: fill with 0
-        # - If impostor has extra columns: ignore them
-        # - If there are NaNs: fill with 0
         X_impostor_df = impostor_features_df.reindex(columns=self.feature_columns, fill_value=0)
         X_impostor_df = X_impostor_df.fillna(0)
         X_impostor = X_impostor_df.values
+        y_impostor = np.zeros(len(X_impostor)) # 0 = Impostor
         
-        y_impostor = np.zeros(len(X_impostor))
-        
-        # 3. Combine data
+        # Combine
         X_test = np.vstack([X_genuine, X_impostor])
         y_test = np.concatenate([y_genuine, y_impostor])
         
-        # 4. Predict
-        if self.model_type in ['OneClassSVM', 'IsolationForest']:
-            y_pred = self.model.predict(X_test)
-            y_pred = (y_pred == 1).astype(int)  # Convert -1/1 to 0/1
+        # 2. Get Predictions AND Scores
+        # Predict: Returns 1 (Normal) or -1 (Anomaly) -> Convert to 1/0
+        y_pred = self.model.predict(X_test)
+        y_pred = (y_pred == 1).astype(int) 
         
-        # 5. Calculate metrics
+        # Decision Function: Raw scores (Positive = Normal, Negative = Anomaly)
+        y_scores = self.model.decision_function(X_test)
+        
+        # --- NEW SECTION: CALCULATE d' (d-prime) ---
+        # We need to separate the scores back into 'Genuine' and 'Impostor' groups
+        # to calculate the distance between their distributions.
+        n_genuine = len(X_genuine)
+        gen_scores = y_scores[:n_genuine]
+        imp_scores = y_scores[n_genuine:]
+        
+        # Calculate Mean (mu) and Standard Deviation (sigma)
+        mu_gen = np.mean(gen_scores)
+        mu_imp = np.mean(imp_scores)
+        sigma_gen = np.std(gen_scores)
+        sigma_imp = np.std(imp_scores)
+        
+        # Calculate d-prime
+        # Formula: sqrt(2) * |mean1 - mean2| / sqrt(var1 + var2)
+        denominator = np.sqrt(sigma_gen**2 + sigma_imp**2)
+        
+        if denominator == 0:
+            d_prime = 0.0
+        else:
+            d_prime = (np.sqrt(2) * abs(mu_gen - mu_imp)) / denominator
+            
+        print(f" d' (Separability Index): {d_prime:.4f}")
+        # ---------------------------------------------
+        
+        # 3. Calculate Metrics
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+        far = fp / (fp + tn) if (fp + tn) > 0 else 0
+        frr = fn / (fn + tp) if (fn + tp) > 0 else 0
+        accuracy = (tp + tn) / len(y_test)
         
-        far = fp / (fp + tn) if (fp + tn) > 0 else 0  # False Acceptance Rate
-        frr = fn / (fn + tp) if (fn + tp) > 0 else 0  # False Rejection Rate
-        accuracy = (tp + tn) / (tp + tn + fp + fn)
-        
-        metrics = {
+        # 4. PLOT ROC CURVE
+        try:
+            fpr, tpr, thresholds = roc_curve(y_test, y_scores)
+            roc_auc = auc(fpr, tpr)
+            
+            plt.figure(figsize=(8, 6))
+            plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+            plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--') # Diagonal line
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Match Rate (FMR)')
+            plt.ylabel('True Match Rate (1 - FNMR)')
+            plt.title(f'ROC Curve - {user_name}')
+            plt.legend(loc="lower right")
+            plt.grid(True)
+            
+            # Save the plot into 'img' folder
+            filename = os.path.join("img", f"roc_curve_{user_name}.png")
+            plt.savefig(filename)
+            print(f"✓ ROC Curve saved as '{filename}'")
+            plt.close()
+            
+        except Exception as e:
+            print(f"⚠ Could not plot ROC: {e}")
+
+        # Return metrics (Added d_prime here)
+        return {
             'FAR': far,
             'FRR': frr,
             'Accuracy': accuracy,
-            'True Positives': tp,
-            'True Negatives': tn,
-            'False Positives': fp,
-            'False Negatives': fn
+            'AUC': roc_auc,
+            'd_prime': d_prime 
         }
-        
-        print(f"\nGenuine phrases: {len(X_genuine)}")
-        print(f"Impostor phrases: {len(X_impostor)}")
-        print(f"\nRESULTS:")
-        print(f"  Accuracy:  {accuracy*100:.2f}%")
-        print(f"  FAR:       {far*100:.2f}%  (Impostors accepted)")
-        print(f"  FRR:       {frr*100:.2f}%  (Genuine users rejected)")
-        print(f"  EER:       ~{((far + frr)/2)*100:.2f}%")
-        
-        return metrics
     
-    def plot_confusion_matrix(self, impostor_features_df):
+    def plot_confusion_matrix(self, impostor_features_df, user_name="Unknown"):
         """Plot confusion matrix"""
         # Get predictions (using same alignment logic as evaluate)
         X_genuine = self.features_df[self.feature_columns].fillna(0).values
@@ -182,13 +218,16 @@ class KeystrokeAuthenticator:
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                    xticklabels=['Impostor', 'Genuine'],
                    yticklabels=['Impostor', 'Genuine'])
-        plt.title(f'Confusion Matrix - {self.model_type}')
+        plt.title(f'Confusion Matrix - {self.model_type} ({user_name})')
         plt.ylabel('True Label')
         plt.xlabel('Predicted Label')
         plt.tight_layout()
-        plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
-        print("\n✓ Confusion matrix saved as 'confusion_matrix.png'")
-        # plt.show() 
+        
+        # Save the plot into 'img' folder
+        filename = os.path.join("img", f"confusion_matrix_{user_name}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\n✓ Confusion matrix saved as '{filename}'")
+        plt.close() # Close to free up memory
     
     def save_model(self, filename, scaler=None):
         """Save trained model to file"""
@@ -198,8 +237,6 @@ class KeystrokeAuthenticator:
             'feature_columns': self.feature_columns,
             'scaler': scaler
         }
-        
-       
             
         with open(filename, 'wb') as f:
             pickle.dump(model_data, f)
@@ -218,7 +255,6 @@ class KeystrokeAuthenticator:
         # Return the scaler if it exists
         return model_data.get('scaler')
       
-    
     def decision_score(self, new_features):
         if self.model_type == 'OneClassSVM':
             return self.model.decision_function([new_features])[0]
