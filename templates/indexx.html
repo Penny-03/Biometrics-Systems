@@ -114,7 +114,7 @@
 </div>
 
 <script>
-    const API_URL = "http://127.0.0.1:5000";
+    const API_URL = "";
     const TARGET = "the quick brown fox jumps over the lazy dog";
     let keystrokes = [];
     let keyPressMap = {};
@@ -229,8 +229,11 @@
         document.getElementById('resultBox').style.display = 'none';
         document.getElementById('resetBtn').style.display = 'none';
     }
+    let verificationInProgress = false;
 
     async function submitVerification() {
+        if (verificationInProgress) return;
+        verificationInProgress = true;
         const userId = document.getElementById('userSelect').value;
         let displayName = userId.replace('user_', '');
         displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
@@ -269,6 +272,7 @@
             }
             
             document.getElementById('resetBtn').style.display = 'block';
+            verificationInProgress = false;
 
         } catch (e) {
             resultBox.innerHTML = 'Error contacting server.';

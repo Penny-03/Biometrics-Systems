@@ -14,6 +14,9 @@ from pathlib import Path
 from model_training import KeystrokeAuthenticator
 # Import your custom modules
 from feature_extraction import KeystrokeFeatureExtractor, KeystrokePreprocessor
+from flask import render_template
+
+
 
 app = Flask(__name__)
 CORS(app)
@@ -31,7 +34,9 @@ def format_frontend_data(frontend_data, user_id):
             "data": [{**k, "phraseNumber": 1} for k in frontend_data]
         }]
     }
-
+@app.route("/")
+def index():
+    return render_template("indexx.html")
 @app.route('/users', methods=['GET'])
 def get_users():
     """Returns list of users who have trained models"""
@@ -113,4 +118,4 @@ def verify_user():
 
 if __name__ == '__main__':
     print(f"Verification Server active. Serving models from: {MODELS_DIR.absolute()}")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False)
