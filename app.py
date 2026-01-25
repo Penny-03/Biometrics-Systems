@@ -20,7 +20,6 @@ CORS(app)
 MODELS_DIR = Path("models")
 
 def format_frontend_data(frontend_data, user_id):
-    """Convert frontend JSON to the format expected by the Feature Extractor"""
     return {
         "metadata": {"userId": user_id, "totalSessions": 1},
         "sessions": [{
