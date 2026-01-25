@@ -48,9 +48,9 @@ def main():
 
     # CONFIGURATION
     USER_CONFIG = {
-        'user_iga':    {'contamination': 0.08, 'n_estimators': 300},
-        'user_chiara': {'contamination': 0.14, 'n_estimators': 400},
-        'user_ferola': {'contamination': 0.21, 'n_estimators': 600},
+        'user_iga':    {'contamination': 0.05, 'n_estimators': 300},
+        'user_chiara': {'contamination': 0.10, 'n_estimators': 400},
+        'user_ferola': {'contamination': 0.25, 'n_estimators': 600},
     }
     DEFAULT_CONFIG = {'contamination': 0.1, 'n_estimators': 300}
     
