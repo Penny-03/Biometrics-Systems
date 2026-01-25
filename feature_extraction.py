@@ -1,8 +1,3 @@
-"""
-Keystroke Dynamics - Feature Extraction and Preprocessing
-Updated with enhanced features and proper train/test handling
-"""
-
 import json
 import pandas as pd
 import numpy as np
@@ -23,14 +18,13 @@ class KeystrokeFeatureExtractor:
         return self.raw_data
 
     def extract_phrase_features(self, phrase_keystrokes):
-        """Extract enhanced features from a single phrase"""
         if len(phrase_keystrokes) < 2:
             return None
 
         dwell_times = [ks['dwellTime'] for ks in phrase_keystrokes]
         flight_times = [ks['flightTime'] for ks in phrase_keystrokes if ks['flightTime'] > 0]
 
-        # UP-DOWN latencies (release -> next press)
+        # UP-DOWN latencies
         ud_latencies = []
         for i in range(len(phrase_keystrokes) - 1):
             ud = phrase_keystrokes[i + 1]['pressTime'] - phrase_keystrokes[i]['releaseTime']
@@ -87,7 +81,6 @@ class KeystrokeFeatureExtractor:
         return features
 
     def extract_digraph_features(self, phrase_keystrokes, top_n=10):
-        """Extract digraph timing features"""
         digraph_times = {}
 
         for i in range(len(phrase_keystrokes) - 1):
@@ -109,7 +102,6 @@ class KeystrokeFeatureExtractor:
         return digraph_features
 
     def extract_basic_features(self, session_data):
-        """Extract features from all phrases in a session"""
         keystrokes = session_data['data']
         
         if len(keystrokes) == 0:
@@ -132,7 +124,7 @@ class KeystrokeFeatureExtractor:
             phrase_features = self.extract_phrase_features(phrase_keystrokes)
             
             if phrase_features is not None:
-                # Digraph features (optional - can be disabled for speed)
+                # Digraph features
                 digraph_features = self.extract_digraph_features(phrase_keystrokes, top_n=10)
                 phrase_features.update(digraph_features)
                 
@@ -147,7 +139,6 @@ class KeystrokeFeatureExtractor:
         return all_phrase_features
     
     def extract_all_features(self):
-        """Extract features from all sessions"""
         if self.raw_data is None:
             self.load_data()
         
@@ -170,14 +161,12 @@ class KeystrokeFeatureExtractor:
         return self.features_df
     
     def save_features(self, output_path):
-        """Save extracted features to CSV"""
         if self.features_df is None:
             self.extract_all_features()
         self.features_df.to_csv(output_path, index=False)
         print(f"\n✓ Features saved to: {output_path}")
     
     def get_feature_summary(self):
-        """Print summary statistics of extracted features"""
         if self.features_df is None:
             self.extract_all_features()
         
@@ -195,7 +184,6 @@ class KeystrokeFeatureExtractor:
 
 
 class KeystrokePreprocessor:
-    """Preprocess features with proper train/test handling"""
     
     def __init__(self, features_df):
         self.features_df = features_df.copy()
@@ -203,18 +191,11 @@ class KeystrokePreprocessor:
         self.scaler = None
         
     def identify_feature_columns(self):
-        """Identify which columns are features (exclude metadata)"""
         self.feature_columns = [col for col in self.features_df.columns 
                                if col not in ['session_id', 'phrase_number', 'user_id', 'phrases_in_session']]
         return self.feature_columns
     
     def align_columns(self, reference_columns):
-        """
-        Force columns to match reference exactly (CRITICAL for test data)
-        
-        Args:
-            reference_columns: List of column names from training data
-        """
         # Add missing columns with 0
         for col in reference_columns:
             if col not in self.features_df.columns:
@@ -227,20 +208,13 @@ class KeystrokePreprocessor:
         return self.features_df
     
     def handle_outliers(self, method='iqr', threshold=3.0):
-        """
-        Remove outliers from features
-        
-        Args:
-            method: 'iqr' or 'zscore'
-            threshold: IQR multiplier (higher = more lenient)
-        """
         if self.feature_columns is None:
             self.identify_feature_columns()
         
         original_count = len(self.features_df)
-        
+
         if method == 'iqr':
-            # Only apply to basic features (not digraphs which are sparse)
+            # Identify basic feature columns (excluding digraphs)
             basic_cols = [c for c in self.feature_columns if 'dig_' not in c]
             mask = pd.Series(True, index=self.features_df.index)
             
@@ -262,16 +236,6 @@ class KeystrokePreprocessor:
         return self.features_df
     
     def fit_transform_scaler(self, method='standard'):
-        """
-        Fit scaler on training data and transform
-        Use this ONLY for training data!
-        
-        Args:
-            method: 'standard' (z-score) or 'minmax'
-            
-        Returns:
-            Tuple of (transformed_df, fitted_scaler)
-        """
         from sklearn.preprocessing import StandardScaler, MinMaxScaler
         
         if self.feature_columns is None:
@@ -291,16 +255,6 @@ class KeystrokePreprocessor:
         return self.features_df, self.scaler
 
     def transform_with_scaler(self, scaler):
-        """
-        Apply existing scaler to new data (DO NOT RE-FIT)
-        Use this for test/authentication data!
-        
-        Args:
-            scaler: Fitted scaler from training data
-            
-        Returns:
-            Transformed dataframe
-        """
         if self.feature_columns is None:
             self.identify_feature_columns()
         
@@ -313,7 +267,6 @@ class KeystrokePreprocessor:
         return self.features_df
 
 
-# Example usage
 if __name__ == "__main__":
     print("KEYSTROKE DYNAMICS - FEATURE EXTRACTION")
     print("=" * 60)

@@ -1,8 +1,3 @@
-"""
-Simple Keystroke Data Visualization
-Analyzes raw typing data without model evaluation
-"""
-
 import json
 import pandas as pd
 import numpy as np
@@ -10,13 +5,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-# Set style
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("Set2")
 plt.rcParams['figure.dpi'] = 150
 
 class SimpleKeystrokeVisualizer:
-    """Simple visualizer for raw keystroke data"""
     
     def __init__(self, genuine_folder="data/genuine", impostor_folder="data/impostors"):
         self.genuine_folder = Path(genuine_folder)
@@ -25,7 +18,6 @@ class SimpleKeystrokeVisualizer:
         self.df = None
         
     def load_data(self):
-        """Load all JSON files and extract basic metrics"""
         print("Loading data...")
         
         # Load genuine users
@@ -77,7 +69,6 @@ class SimpleKeystrokeVisualizer:
         return self.df
     
     def calculate_typing_speed(self):
-        """Calculate typing speed per phrase"""
         speeds = []
         
         # Process genuine users
@@ -156,7 +147,7 @@ class SimpleKeystrokeVisualizer:
             print(f"  Std dwell time:   {user_data['dwell_time'].std():.1f} ms")
             print(f"  Std flight time:  {user_data['flight_time'].std():.1f} ms")
         
-        # Impostor aggregate stats
+        # Impostors
         impostor_df = self.df[self.df['user_type'] == 'impostor']
         if len(impostor_df) > 0:
             print("\n\nIMPOSTORS (AGGREGATE):")
@@ -169,15 +160,14 @@ class SimpleKeystrokeVisualizer:
             print(f"  Std flight time:  {impostor_df['flight_time'].std():.1f} ms")
     
     def plot_all(self):
-        """Generate all visualizations"""
         
         genuine_df = self.df[self.df['user_type'] == 'genuine']
         impostor_df = self.df[self.df['user_type'] == 'impostor']
         
-        # 1. Genuine users detailed analysis
+        # Genuine users analysis
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         
-        # Plot 1: Dwell time distribution (genuine users)
+        # Dwell time distribution (genuine users)
         ax = axes[0, 0]
         for user in genuine_df['user'].unique():
             user_data = genuine_df[genuine_df['user'] == user]['dwell_time']
@@ -188,7 +178,7 @@ class SimpleKeystrokeVisualizer:
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
         
-        # Plot 2: Flight time distribution (genuine users)
+        # Flight time distribution (genuine users)
         ax = axes[0, 1]
         for user in genuine_df['user'].unique():
             user_data = genuine_df[genuine_df['user'] == user]['flight_time']
@@ -200,7 +190,7 @@ class SimpleKeystrokeVisualizer:
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
         
-        # Plot 3: Box plot - Dwell time (genuine users)
+        # Box plot - Dwell time (genuine users)
         ax = axes[1, 0]
         dwell_data = [genuine_df[genuine_df['user'] == user]['dwell_time'] 
                       for user in genuine_df['user'].unique()]
@@ -213,7 +203,7 @@ class SimpleKeystrokeVisualizer:
         ax.set_title('Dwell Time Consistency (Genuine Users)', fontweight='bold', fontsize=12)
         ax.grid(axis='y', alpha=0.3)
         
-        # Plot 4: Box plot - Flight time (genuine users)
+        # Box plot - Flight time (genuine users)
         ax = axes[1, 1]
         flight_data = [genuine_df[(genuine_df['user'] == user) & (genuine_df['flight_time'] > 0)]['flight_time']
                        for user in genuine_df['user'].unique()]
@@ -231,11 +221,11 @@ class SimpleKeystrokeVisualizer:
         print("\n✓ Saved: genuine_users_stats.png")
         plt.show()
     
-        # 2. Genuine vs Impostor comparison
+        # Genuine vs Impostor comparison
         if len(impostor_df) > 0:
             fig, axes = plt.subplots(1, 2, figsize=(14, 5))
             
-            # Plot 1: Dwell time comparison
+            # Dwell time comparison
             ax = axes[0]
             ax.hist(genuine_df['dwell_time'], bins=40, alpha=0.6, 
                    label='Genuine Users', color='green', edgecolor='black')
@@ -247,7 +237,7 @@ class SimpleKeystrokeVisualizer:
             ax.legend()
             ax.grid(axis='y', alpha=0.3)
             
-            # Plot 2: Flight time comparison
+            # Flight time comparison
             ax = axes[1]
             genuine_flight = genuine_df[genuine_df['flight_time'] > 0]['flight_time']
             impostor_flight = impostor_df[impostor_df['flight_time'] > 0]['flight_time']
@@ -266,12 +256,12 @@ class SimpleKeystrokeVisualizer:
             print("✓ Saved: genuine_vs_impostor.png")
             plt.show()
         
-        # 3. Typing Speed Analysis
+        # Typing Speed Analysis
         speed_df = self.calculate_typing_speed()
         
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
         
-        # Plot 1: Speed distribution by user type
+        # Speed distribution by user type
         ax = axes[0]
         genuine_speeds = speed_df[speed_df['user_type'] == 'genuine']
         impostor_speeds = speed_df[speed_df['user_type'] == 'impostor']
@@ -289,7 +279,7 @@ class SimpleKeystrokeVisualizer:
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
         
-        # Plot 2: Average metrics comparison
+        # Average metrics comparison
         ax = axes[1]
         metrics = ['Dwell Time\n(ms)', 'Flight Time\n(ms)']
         genuine_means = [genuine_df['dwell_time'].mean(), 
@@ -317,9 +307,6 @@ class SimpleKeystrokeVisualizer:
         plt.show()
 
 
-# ============================================================
-# USAGE
-# ============================================================
 if __name__ == "__main__":
     # Initialize with both genuine and impostor folders
     viz = SimpleKeystrokeVisualizer(

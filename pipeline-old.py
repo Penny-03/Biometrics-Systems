@@ -1,8 +1,3 @@
-"""
-COMPLETE KEYSTROKE DYNAMICS AUTHENTICATION PIPELINE
-Updated for enhanced features and proper train/test handling
-"""
-
 import sys
 import json
 import pandas as pd
@@ -14,19 +9,14 @@ from feature_extraction import KeystrokeFeatureExtractor, KeystrokePreprocessor
 from model_training import KeystrokeAuthenticator
 
 def print_header(title):
-    """Print formatted section header"""
     print("\n" + "="*70)
     print(f"  {title}")
     print("="*70)
 
 def main():
-    """Main pipeline execution"""
     
     print_header("KEYSTROKE DYNAMICS AUTHENTICATION - COMPLETE PIPELINE")
-    
-    # ========================================================================
-    # STEP 1: DATA COLLECTION
-    # ========================================================================
+
     print_header("STEP 1: DATA COLLECTION")
     print("✓ Data collected using web-based collector")
     print("  Files needed:")
@@ -38,10 +28,7 @@ def main():
     if not Path(genuine_user_file).exists():
         print("❌ Error: File not found!")
         return
-    
-    # ========================================================================
-    # STEP 2: FEATURE EXTRACTION
-    # ========================================================================
+
     print_header("STEP 2: FEATURE EXTRACTION")
     
     extractor = KeystrokeFeatureExtractor(genuine_user_file)
@@ -54,9 +41,6 @@ def main():
     features_output = "genuine_user_features.csv"
     extractor.save_features(features_output)
     
-    # ========================================================================
-    # STEP 3: PREPROCESSING
-    # ========================================================================
     print_header("STEP 3: PREPROCESSING")
     
     preprocessor = KeystrokePreprocessor(features_df)
@@ -70,11 +54,11 @@ def main():
             print("Exiting. Please collect more data.")
             return
     
-    # Remove outliers (relaxed threshold)
+    # Remove outliers
     print("\nRemoving outliers...")
     preprocessor.handle_outliers(method='iqr', threshold=3.0)
     
-    # Fit scaler and transform (TRAINING DATA)
+    # Fit scaler and transform
     print("Normalizing features...")
     processed_features, fitted_scaler = preprocessor.fit_transform_scaler(method='standard')
     
@@ -82,7 +66,7 @@ def main():
     processed_features.to_csv("processed_features.csv", index=False)
     print("✓ Preprocessed features saved to 'processed_features.csv'")
     
-    # Save the scaler and feature columns (CRITICAL for authentication)
+    # Save the scaler and feature columns
     scaler_data = {
         'scaler': fitted_scaler,
         'feature_columns': preprocessor.feature_columns
@@ -90,10 +74,7 @@ def main():
     with open("scaler.pkl", 'wb') as f:
         pickle.dump(scaler_data, f)
     print("✓ Scaler saved to 'scaler.pkl'")
-    
-    # ========================================================================
-    # STEP 4: MODEL TRAINING
-    # ========================================================================
+
     print_header("STEP 4: MODEL TRAINING")
     
     if len(processed_features) < 5:
@@ -122,9 +103,6 @@ def main():
     model_filename = "keystroke_auth_model.pkl"
     authenticator.save_model(model_filename)
     
-    # ========================================================================
-    # STEP 5: EVALUATION
-    # ========================================================================
     print_header("STEP 5: EVALUATION (OPTIONAL)")
     
     has_impostor = input("\nDo you have impostor data for testing? (y/n): ").strip().lower()
@@ -144,11 +122,11 @@ def main():
                 imp_extractor.load_data()
                 imp_features = imp_extractor.extract_all_features()
                 
-                # Preprocess WITH SAME SCALER (no refitting!)
+                # Preprocess with same scaler
                 imp_preprocessor = KeystrokePreprocessor(imp_features)
                 imp_preprocessor.identify_feature_columns()
                 
-                # CRITICAL: Align columns first, then transform
+                # Align columns first then transform
                 imp_preprocessor.align_columns(preprocessor.feature_columns)
                 imp_preprocessor.transform_with_scaler(fitted_scaler)
                 
@@ -193,9 +171,6 @@ def main():
             else:
                 print("❌ Poor. EER > 20% - Collect more data and retrain")
     
-    # ========================================================================
-    # STEP 6: DEPLOYMENT READY
-    # ========================================================================
     print_header("STEP 6: DEPLOYMENT")
     
     print("\n✓ Pipeline complete! Your authentication system is ready.")

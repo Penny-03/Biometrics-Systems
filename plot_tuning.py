@@ -12,7 +12,7 @@ CONTAMINATION_RANGE = [0.01, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 def main():
     print(f"Generating Error vs. Strictness Plot for {USER_FILE}...")
     
-    # 1. Load User Data
+    # Load User Data
     extractor = KeystrokeFeatureExtractor(USER_FILE)
     extractor.load_data()
     feats = extractor.extract_all_features()
@@ -22,7 +22,7 @@ def main():
     pre.handle_outliers(method='iqr', threshold=3.5)
     X_train, scaler = pre.fit_transform_scaler()
     
-    # 2. Load Impostor Data (for testing)
+    # Load Impostor Data
     imp_feats_list = []
     import glob
     from pathlib import Path
@@ -38,24 +38,22 @@ def main():
     pre_imp.align_columns(pre.feature_columns)
     pre_imp.transform_with_scaler(scaler)
     X_imp = pre_imp.features_df
-    
-    # 3. The Loop
+
+    # Tuning Loop
     eer_scores = []
     
     for c in CONTAMINATION_RANGE:
         auth = KeystrokeAuthenticator(X_train)
-        # Using 600 trees as per your optimal config for Ferola
         auth.train_isolation_forest(contamination=c, n_estimators=400, random_state=42)
         
-        # Evaluate
         metrics = auth.evaluate_with_impostors(X_imp, user_name="Tuning")
         
-        # Calculate EER (average of FAR and FRR)
+        # Calculate EER
         eer = (metrics['FAR'] + metrics['FRR']) / 2
         eer_scores.append(eer)
         print(f"Contamination: {c} -> EER: {eer:.4f}")
 
-    # 4. Plot
+    # Plot
     plt.figure(figsize=(8, 5))
     plt.plot(CONTAMINATION_RANGE, eer_scores, marker='o', linestyle='-', color='b')
     plt.title(f'Error vs. Strictness (User 2)')

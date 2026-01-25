@@ -29,12 +29,11 @@ def build_session_json(row):
 
     keystrokes = []
 
-    # ---- RECONSTRUCT TIMELINE ----
-    # Start everything at timestamp 0 for simplicity
+    # Start everything at timestamp 0
     running_press_time = 0.0
 
     for i, (csv_key, output_key, is_shift) in enumerate(PASSWORD_ORDER):
-        # Read dwell time
+        # Dwell time
         H_col = f"H.{csv_key}"
         dwell = float(row[H_col])
 
@@ -44,15 +43,13 @@ def build_session_json(row):
         # Release time
         release = press + dwell
 
-        # Determine flight times
+        # Flight times
         if i == 0:
             flight = 0.0
         else:
-            # UD (release → press)
             UD_col = f"UD.{PASSWORD_ORDER[i-1][0]}.{csv_key}"
             flight = float(row[UD_col])
 
-        # Add keystroke block matching your real JSON format
         keystrokes.append({
             "sessionId": sessionId,
             "userId": subject,
@@ -65,7 +62,6 @@ def build_session_json(row):
             "phraseNumber": rep
         })
 
-        # Prepare for next key press
         running_press_time = press + (0 if i == 0 else float(row[f"DD.{PASSWORD_ORDER[i-1][0]}.{csv_key}"]))
 
     session_json = {

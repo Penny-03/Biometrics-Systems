@@ -1,12 +1,3 @@
-"""
-COMPLETE KEYSTROKE DYNAMICS AUTHENTICATION PIPELINE
-Features: 
-- Multi-user training with Isolation Forest
-- Robust Data Normalization (Fixes the 50% accuracy bug)
-- Feature Alignment
-- Automatic ROC Curve and Confusion Matrix generation
-"""
-
 import sys
 import json
 import pandas as pd
@@ -48,7 +39,7 @@ def main():
     print(f"✓ Found {len(genuine_files)} Genuine Users")
     print(f"✓ Found {len(impostor_files)} Dedicated Impostor Files")
 
-    # --- ANONYMIZATION MAPPING ---
+    # ANONYMIZATION
     ANONYMOUS_MAP = {
         'user_iga':    'User 1',
         'user_chiara': 'User 2',
@@ -68,24 +59,23 @@ def main():
     for user_file in genuine_files:
         real_name = user_file.stem
         
-        # Determine the display name for the Report/Plots
         display_name = ANONYMOUS_MAP.get(real_name, real_name)
         
         print_header(f"PROCESSING: {display_name} ({real_name})")
         
-        # --- 1. EXTRACT ---
+        # EXTRACTING FEATURES
         extractor = KeystrokeFeatureExtractor(str(user_file))
         extractor.load_data()
         features_df = extractor.extract_all_features()
 
-        # --- 2. PREPROCESS ---
+        # PREPROCESSING
         preprocessor = KeystrokePreprocessor(features_df)
         preprocessor.identify_feature_columns()
         preprocessor.handle_outliers(method='iqr', threshold=3.5)
         processed_features, trained_scaler = preprocessor.fit_transform_scaler(method='standard')
         master_feature_list = preprocessor.feature_columns
         
-        # --- 3. TRAIN ---
+        # TRAINING
         authenticator = KeystrokeAuthenticator(processed_features)
         config = USER_CONFIG.get(real_name, DEFAULT_CONFIG)
         
@@ -95,11 +85,11 @@ def main():
             n_estimators=config['n_estimators']
         )
         
-        # Save model using REAL name (so the App still works!)
+        # Save model
         model_filename = MODELS_DIR / f"model_{real_name}.pkl"
         authenticator.save_model(str(model_filename), scaler=trained_scaler)
         
-        # --- 4. EVALUATE ---
+        # EVALUATION WITH IMPOSTORS
         other_genuine = [f for f in genuine_files if f != user_file]
         attack_files = impostor_files + other_genuine
         
@@ -118,29 +108,25 @@ def main():
         if all_impostor_features:
             impostor_df = pd.concat(all_impostor_features, ignore_index=True)
             
-            # Pass 'display_name' (User 1) so the plot Title and Filename are anonymized
             metrics = authenticator.evaluate_with_impostors(impostor_df, user_name=display_name)
-            metrics['User'] = display_name # Save anonymous name to table
+            metrics['User'] = display_name
             overall_metrics.append(metrics)
             
             try:
-                # Pass 'display_name' here too
                 authenticator.plot_confusion_matrix(impostor_df, user_name=display_name)
             except Exception as e:
                 print(f"Warning: Could not plot confusion matrix: {e}")
 
-    # --- REPORT ---
+    # FINAL REPORT
     print_header("FINAL REPORT")
     if overall_metrics:
         results_df = pd.DataFrame(overall_metrics)
         results_df['EER'] = (results_df['FAR'] + results_df['FRR']) / 2
         
-        # ADD 'd_prime' TO THIS LIST ▼
         print(results_df[['User', 'FAR', 'FRR', 'EER', 'Accuracy', 'd_prime']].to_string(index=False))
         
         print(f"\nAVERAGE EER: {results_df['EER'].mean()*100:.2f}%")
         
-        # Optional: Print Average d' to show overall system separability
         print(f"AVERAGE d':   {results_df['d_prime'].mean():.4f}")
         
         best = results_df.loc[results_df['EER'].idxmin()]

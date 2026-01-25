@@ -9,7 +9,6 @@
             --primary: #2563eb; 
             --bg: #f8fafc; 
             --text: #1e293b; 
-            /* Added colors for feedback */
             --success-bg: #ecfdf5;
             --success-border: #16a34a;
             --error-bg: #fef2f2;
@@ -52,7 +51,6 @@
         }
         textarea:focus { outline: none; border-color: var(--primary); }
         
-        /* NEW: Styles for visual feedback */
         textarea.success {
             background: var(--success-bg);
             border-color: var(--success-border);
@@ -119,7 +117,7 @@
     let keystrokes = [];
     let keyPressMap = {};
 
-    // 1. Load Users
+    // Load Users
     async function loadUsers() {
         try {
             const res = await fetch(`${API_URL}/users`);
@@ -140,22 +138,22 @@
     }
     loadUsers();
 
-    // 2. Enable typing
+    // Enable typing
     document.getElementById('userSelect').addEventListener('change', (e) => {
         const input = document.getElementById('inputField');
         input.disabled = !e.target.value;
         if(!input.disabled) input.focus();
     });
 
-    // 3. Keystroke Recording Logic
+    // Keystroke Recording Logic
     const input = document.getElementById('inputField');
     
-    // KEYDOWN: Handle Backspace Reset
+    // Handle Backspace Reset
     input.addEventListener('keydown', (e) => {
         // Prevent Enter
         if(e.key === 'Enter') { e.preventDefault(); return; }
 
-        // NEW: Backspace clears everything
+        // Backspace clears everything
         if (e.key === 'Backspace') {
             e.preventDefault();
             clearTypingData(); // Call the helper to clear text
@@ -165,7 +163,7 @@
         if(!keyPressMap[e.code]) keyPressMap[e.code] = Date.now();
     });
 
-    // KEYUP: Record timing
+    // Record timing
     input.addEventListener('keyup', (e) => {
         if (e.key === 'Backspace' || e.key === 'Enter') return;
 
@@ -188,7 +186,6 @@
         checkProgress();
     });
 
-    // INPUT: Visual Feedback (Red/Green)
     input.addEventListener('input', () => {
         const val = input.value.toLowerCase();
         
@@ -212,7 +209,7 @@
         }
     }
 
-    // Helper: Clears only the typing data (for Backspace)
+    // Clears only the typing data (for Backspace)
     function clearTypingData() {
         keystrokes = [];
         keyPressMap = {};
@@ -221,7 +218,7 @@
         document.getElementById('progressBar').style.width = '0%';
     }
 
-    // Helper: Full Reset (for Try Again button)
+    // Full Reset (for Try Again button)
     function fullReset() {
         clearTypingData();
         input.disabled = false;

@@ -134,12 +134,10 @@
             const key = e.key;
             const code = e.code;
             
-            // Don't record Enter, Backspace, or modifier keys
             if (key === 'Enter' || key === 'Backspace' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
             
             const timestamp = Date.now();
             
-            // Use code as the tracking key to handle shift properly
             if (!keyPressTime.current[code]) {
               keyPressTime.current[code] = timestamp;
             }
@@ -151,7 +149,6 @@
             const key = e.key;
             const code = e.code;
             
-            // Don't record Enter, Backspace, or modifier keys
             if (key === 'Enter' || key === 'Backspace' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
             
             const releaseTime = Date.now();
@@ -165,7 +162,7 @@
               const keystroke = {
                 sessionId: sessionId.current,
                 userId: userId,
-                key: key.length === 1 ? key : `[${key}]`, // Use the key from keyUp (what actually appeared)
+                key: key.length === 1 ? key : `[${key}]`,
                 pressTime: pressTime,
                 releaseTime: releaseTime,
                 dwellTime: dwellTime,
@@ -180,7 +177,6 @@
           };
 
           const validateAndSubmitPhrase = () => {
-            // Don't validate if there's no text or no keystrokes recorded
             if (typedText.trim().length === 0 || currentPhraseKeystrokes.length === 0) {
               setErrorMessage('⚠ Please type the phrase before submitting!');
               setTimeout(() => {
@@ -193,14 +189,12 @@
             const expected = normalizeText(textToType);
             
             if (normalized === expected) {
-              // Correct phrase - save it
               setKeystrokeData(prev => [...prev, ...currentPhraseKeystrokes]);
               setCompletedPhrases(prev => prev + 1);
               setSuccessMessage(`✓ Phrase ${completedPhrases + 1} recorded successfully!`);
               setErrorMessage('');
               setInputStatus('success');
               
-              // Clear for next phrase
               setTimeout(() => {
                 setTypedText('');
                 setCurrentPhraseKeystrokes([]);
@@ -208,7 +202,6 @@
                 setInputStatus('');
               }, 1000);
             } else {
-              // Incorrect phrase - reset
               setErrorMessage('✗ Incorrect phrase! Please type it exactly. Resetting...');
               setSuccessMessage('');
               setInputStatus('error');
@@ -225,9 +218,7 @@
           const handleKeyPress = (e) => {
             if (!isRecording) return;
             
-            // Check for Backspace
             if (e.key === 'Backspace') {
-              // Reset the current attempt
               setTypedText('');
               setCurrentPhraseKeystrokes([]);
               setErrorMessage('⟲ Backspace pressed - Phrase attempt reset!');
@@ -245,7 +236,6 @@
           const handleTextChange = (e) => {
             const newText = e.target.value;
             
-            // Check if Enter was pressed (newline added)
             if (newText.includes('\n')) {
               validateAndSubmitPhrase();
               return;
@@ -253,7 +243,6 @@
             
             setTypedText(newText);
             
-            // Real-time validation feedback
             const normalized = normalizeText(newText);
             const expected = normalizeText(textToType);
             
